@@ -9,6 +9,22 @@ from astropy.wcs import WCS
 osc = pd.read_csv('OSC-pre2014-expt-clean.csv', index_col='Name')
 
 
+def galex_ab_mag(cps, band):
+    const = 18.82 if band=='FUV' else 20.08
+    return -2.5 * np.log10(cps) + const
+
+
+def galex_flux(cps, band):
+    factor = 1.4e-15 if band=='FUV' else 2.06e-16
+    return factor * cps
+
+
+def galex_delta_mag(cps, band, exp_time):
+    factor = 0.05 if band=='FUV' else 0.027
+    return -2.5 * (np.log10(cps) - np.log10(cps + np.sqrt(cps * exp_time + \
+            (factor * cps * exp_time) ** 2) / exp_time))
+
+
 # Get list of FITS file names from data directory
 def get_fits_files(fits_dir, csv=None):
     if csv:

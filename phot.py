@@ -113,10 +113,11 @@ def fits_phot(fits_file, positions, r=3., r_in=6., r_out=9.):
     return cps, cps_err
 
 
-def find_stars(data):
+def find_stars(data, threshold=10., fwhm=3.):
     mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-    print(std)
-    daofind = DAOStarFinder(threshold = 5.*std, fwhm=3.0)
+    if std == 0.:
+        std = np.std(data)
+    daofind = DAOStarFinder(threshold = threshold * std, fwhm=fwhm)
     sources = daofind(data - median)
     return sources
 

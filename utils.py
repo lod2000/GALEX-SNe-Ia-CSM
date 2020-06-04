@@ -97,10 +97,14 @@ class Fits:
         self.path = fits_file
         self.filename = fits_file.name
         # exposure times (some fits images don't have individual exposure times)
+        exposures = self.header['NAXIS3'] if self.header['NAXIS'] == 3 else 1
         try:
-            expts = [self.header['EXPT'+str(i)] for i in range(self.header['NAXIS3'])]
+            expts = [self.header['EXPT'+str(i)] for i in range(exposures)]
+            tmeans = [self.header['TMEAN'+str(i)] for i in range(exposures)]
         except KeyError:
-            expts = []
+            expts = [self.header['EXPTIME'] / exposures] * exposures
+            tmeans = []
         self.expts = np.array(expts)
+        self.tmeans = np.array(tmeans)
         self.wcs = WCS(self.header)
 

@@ -47,13 +47,16 @@ fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
 categories = []
 count_epochs = []
 for fits_file in tqdm(fits_files):
-    f = utils.Fits(fits_file)
-    category = classify_fits(f)
-    if category == 'single':
-        epochs = 1
-    else:
-        epochs = f.header['NAXIS3']
-    categories.append([f.filename, category, epochs])
+    try:
+        f = utils.Fits(fits_file)
+        category = classify_fits(f)
+        if category == 'single':
+            epochs = 1
+        else:
+            epochs = f.header['NAXIS3']
+        categories.append([f.filename, category, epochs])
+    except ValueError:
+        print(fits_file)
 
 df = pd.DataFrame(np.array(categories), columns=['File', 'Category', 'Epochs'])
 df.to_csv('fits_categories.csv', index=False)

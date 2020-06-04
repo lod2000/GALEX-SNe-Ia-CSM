@@ -6,7 +6,6 @@ from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.wcs import WCS
 
-osc = pd.read_csv('OSC-pre2014-expt-clean.csv', index_col='Name')
 
 
 def galex_ab_mag(cps, band):
@@ -33,6 +32,7 @@ def get_fits_files(fits_dir, csv=None):
     else:
         return [f for f in fits_dir.glob('**/*.fits.gz')]
 
+
 # Import Open Supernova Catalog csv file
 def import_osc(osc_csv):
     return pd.read_csv(osc_csv, index_col='Name')
@@ -44,11 +44,11 @@ def fits2sn(fits_file, osc):
     # Pull SN name from fits file name
     sn_name = '-'.join(fits_file.name.split('-')[:-1])
     # '_' may represent either ':' or ' ' (thanks Windows)
-    sn_name = sn_name.replace('_', ':')
+    sn_name = sn_name.replace('_', ' ')
     try:
         osc.loc[sn_name]
     except KeyError as e:
-        sn_name = sn_name.replace(':', ' ')
+        sn_name = sn_name.replace(' ', ':')
     return sn_name
 
 
@@ -56,6 +56,8 @@ def fits2sn(fits_file, osc):
 def sn2fits(sn, band):
     return sn.replace(':','_').replace(' ','_') + '-' + band + '.fits.gz'
 
+
+osc = import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
 
 class SN:
     def __init__(self, fits_file):
@@ -70,7 +72,13 @@ class SN:
         '''
         name = fits2sn(fits_file, osc)
         self.name = name
-        self.disc_date = Time(str(osc.loc[name, 'Disc. Date']), format='iso')
+        # Discovery date is sometimes incomplete
+        disc_date = osc.loc[name, 'Disc. Date']
+        if len(str(disc_date).split('-')) < 3:
+            self.disc_date = np.nan
+        else:
+            self.disc_date = Time(str(disc_date), format='iso')
+        #self.disc_date = Time(str(osc.loc[name, 'Disc. Date']), format='iso')
         self.mmax = osc.loc[name, 'mmax']
         self.host = osc.loc[name, 'Host Name']
         self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
@@ -87,10 +95,11 @@ class Fits:
         self.sn = SN(fits_file)
         self.band = fits_file.name.split('-')[-1].split('.')[0]
         self.path = fits_file
+        self.filename = fits_file.name
         # exposure times (some fits images don't have individual exposure times)
         try:
             expts = [self.header['EXPT'+str(i)] for i in range(self.header['NAXIS3'])]
-        except KeyError e:
+        except KeyError:
             expts = []
         self.expts = np.array(expts)
         self.wcs = WCS(self.header)

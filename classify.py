@@ -6,20 +6,59 @@ from tqdm import tqdm
 import utils
 from pathlib import Path
 
-## convert galex time to unix time: galex + 315964800
+def classify_fits(fits_img):
+    f = fits_img
+    exp_range = Time([f.header['EXPSTART'], f.header['EXPEND']], format='gps')
 
+    category = ''
+    # Check for multiple images; if not, sort into 'single' category
+    if f.header['NAXIS'] == 2:
+        category = 'single'
+    # Some dates in the csv are missing or aren't specific enough
+    elif pd.isna(f.sn.disc_date):
+        category = 'unknown'
+    elif exp_range.iso[1] < f.sn.disc_date:
+        category = 'pre_disc'
+    elif exp_range.iso[0] > f.sn.disc_date:
+        category = 'post_disc'
+    elif exp_range[0] < f.sn.disc_date and exp_range.iso[1] > f.sn.disc_date:
+        category = 'pre_post_disc'
+    # Note: might have some issues with discovery date not including time
+    # information
+
+    return category
+
+
+'''
 unknown = []
 single = []
 pre = []
 post = []
 both = []
+'''
 
 # Read clean OSC csv
-osc = utils.import_osc()
+osc = utils.import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
 
-fits_dir = Path('/mnt/d/GALEX_SNeIa_REU/fits')
+#fits_dir = Path('/mnt/d/GALEX_SNeIa_REU/fits')
+fits_dir = Path('/mnt/exthdd/GALEX_SNeIa_REU/fits')
 fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
 
+categories = []
+count_epochs = []
+for fits_file in tqdm(fits_files):
+    f = utils.Fits(fits_file)
+    category = classify_fits(f)
+    if category == 'single':
+        epochs = 1
+    else:
+        epochs = f.header['NAXIS3']
+    categories.append([f.filename, category, epochs])
+
+df = pd.DataFrame(np.array(categories), columns=['File', 'Category', 'Epochs'])
+df.to_csv('fits_categories.csv', index=False)
+
+'''
 for fits_file in tqdm(fits_files):
     # Pull SN name from fits file name
     sn_name = utils.fits2sn(fits_file, osc)
@@ -43,8 +82,9 @@ for fits_file in tqdm(fits_files):
     
     try:
         # Check for multiple images; if not, sort into 'single' category
-        if naxis == 2:
-            single.append(sn_longname)
+        #if naxis == 2:
+        if f.header['NAXIS'] == 2:
+            #single.append(sn_longname)
             #print('Single observation')
         # Some dates in the csv are missing or aren't specific enough
         elif pd.isna(disc_date) or len(disc_date.split('-')) < 3:
@@ -75,3 +115,4 @@ pd.DataFrame(post).to_csv('post_discovery.csv', index=False, header=False)
 pd.DataFrame(pre).to_csv('pre_discovery.csv', index=False, header=False)
 pd.DataFrame(single).to_csv('single_observation.csv', index=False, header=False)
 pd.DataFrame(unknown).to_csv('unknown_discovery.csv', index=False, header=False)
+'''

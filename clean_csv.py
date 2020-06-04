@@ -20,6 +20,9 @@ csvfile = 'ref/OSC-pre2014-expt.csv'
 osc = pd.read_csv(csvfile, quotechar='"',skipinitialspace=True)
 print(osc)
 
+# Remove duplicate rows
+osc = osc.drop_duplicates(['Name'], keep='first')
+
 # Replace discovery date with ISO value
 newdates = []
 for date in osc['Disc. Date']:

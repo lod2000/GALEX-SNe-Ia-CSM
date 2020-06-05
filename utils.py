@@ -101,7 +101,8 @@ class Fits:
             expts = [self.header['EXPT'+str(i)] for i in range(exposures)]
             tmeans = [self.header['TMEAN'+str(i)] for i in range(exposures)]
         except KeyError:
-            expts = [self.header['EXPTIME'] / exposures] * exposures
+            #expts = [self.header['EXPTIME'] / exposures] * exposures
+            expts = []
             tmeans = []
         self.expts = np.array(expts)
         self.tmeans = np.array(tmeans)

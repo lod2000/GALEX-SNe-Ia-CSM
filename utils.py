@@ -7,7 +7,6 @@ from astropy.io import fits
 from astropy.wcs import WCS
 
 
-
 def galex_ab_mag(cps, band):
     const = 18.82 if band=='FUV' else 20.08
     return -2.5 * np.log10(cps) + const

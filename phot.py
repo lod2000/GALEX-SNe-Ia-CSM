@@ -157,15 +157,6 @@ def sn_phot(fits_file, r=3., r_in=6., r_out=9.):
         return np.array([[f.filename, np.nan, np.nan, np.nan]])
 
 
-def find_stars(data, threshold=10., fwhm=3.):
-    mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-    if std == 0.:
-        std = np.std(data)
-    daofind = DAOStarFinder(threshold = threshold * std, fwhm=fwhm)
-    sources = daofind(data - median)
-    return sources
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Returns photometry at center\
             of each FITS image.')

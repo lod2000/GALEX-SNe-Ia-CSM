@@ -14,6 +14,15 @@ import phot
 import utils
 
 
+def find_stars(data, threshold=10., fwhm=3.):
+    mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+    if std == 0.:
+        std = np.std(data)
+    daofind = DAOStarFinder(threshold = threshold * std, fwhm=fwhm)
+    sources = daofind(data - median)
+    return sources
+
+
 '''
 Runs DAOPhot star finder on a given FITS image, calculates GALEX magnitudes and 
 sky coordinates, and returns an astropy Table.

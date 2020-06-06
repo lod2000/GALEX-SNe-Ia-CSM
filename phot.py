@@ -20,7 +20,6 @@ from photutils import CircularAperture
 from photutils import aperture_photometry
 from photutils import CircularAnnulus
 from photutils.utils import calc_total_error
-from photutils import DAOStarFinder
 
 import utils
 

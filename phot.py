@@ -176,7 +176,7 @@ if __name__ == '__main__':
     fits_files = [fits_dir / f for f in fits_files]
     #fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
 
-    with mp.Pool(6) as pool:
+    with mp.Pool() as pool:
         cps = list(tqdm(pool.imap(sn_phot, fits_files), total=len(fits_files)))
 
     df = pd.DataFrame(np.concatenate(cps), columns=['File', 'Epoch', 'CPS', 'CPS Error'])

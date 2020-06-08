@@ -14,10 +14,12 @@ def classify_fits(fits_file):
     f = utils.Fits(fits_file)
     exp_range = Time([f.header['EXPSTART'], f.header['EXPEND']], format='gps')
 
+    # Categorize based on discovery and image dates
     category = ''
     # Check for multiple images; if not, sort into 'single' category
     if f.header['NAXIS'] == 2:
         category = 'single'
+        epochs = 1
     # Some dates in the csv are missing or aren't specific enough
     elif pd.isna(f.sn.disc_date):
         category = 'unknown'
@@ -30,12 +32,17 @@ def classify_fits(fits_file):
     # Note: might have some issues with discovery date not including time
     # information
 
-    if category == 'single':
-        epochs = 1
-    else:
+    # Total epochs
+    if not category == 'single':
         epochs = f.header['NAXIS3']
+    # Epochs before and after explosion
+    if len(f.tmeans) > 0 and not pd.isna(f.sn.disc_date):
+        pre = len(f.tmeans[f.tmeans < f.sn.disc_date.gps])
+        post = len(f.tmeans[f.tmeans > f.sn.disc_date.gps])
+    else:
+        pre = post = np.nan
 
-    return [f.filename, category, epochs]
+    return [f.filename, category, epochs, pre, post]
 
 
 if __name__ == '__main__':
@@ -52,12 +59,14 @@ if __name__ == '__main__':
     fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
 
     # multiprocess classification
-    with mp.Pool(4) as pool:
+    with mp.Pool() as pool:
         categories = list(tqdm(pool.imap(classify_fits, fits_files), 
                 total=len(fits_files)))
 
-    df = pd.DataFrame(np.array(categories), columns=['File', 'Category', 'Epochs'])
+    df = pd.DataFrame(np.array(categories), columns=['File', 'Category', 
+            'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN'])
     try:
         df.to_csv('out/fits_categories.csv', index=False)
+    # In case I forget to close the CSV first...
     except PermissionError:
         df.to_csv('out/fits_categories-tmp.csv', index=False)

@@ -60,15 +60,6 @@ osc = import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
 
 class SN:
     def __init__(self, fits_file):
-        '''
-        name = '-'.join(fits_file.name.split('-')[:-1])
-        name = name.replace('_', ':')
-        try:
-            osc.loc[name]
-        except KeyError as e:
-            name = name.replace(':', ' ')
-        self.name = name
-        '''
         name = fits2sn(fits_file, osc)
         self.name = name
         # Discovery date is sometimes incomplete
@@ -102,8 +93,12 @@ class Fits:
             tmeans = [self.header['TMEAN'+str(i)] for i in range(exposures)]
         except KeyError:
             #expts = [self.header['EXPTIME'] / exposures] * exposures
-            expts = []
-            tmeans = []
+            if exposures == 1:
+                expts = [self.header['EXPTIME']]
+                tmeans = [(self.header['EXPEND'] + self.header['EXPSTART']) / 2]
+            else:
+                expts = []
+                tmeans = []
         self.expts = np.array(expts)
         self.tmeans = np.array(tmeans)
         self.wcs = WCS(self.header)

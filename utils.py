@@ -56,7 +56,7 @@ def sn2fits(sn, band):
     return sn.replace(':','_').replace(' ','_') + '-' + band + '.fits.gz'
 
 
-osc = import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
+osc = import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
 
 class SN:
     def __init__(self, fits_file):
@@ -69,12 +69,14 @@ class SN:
         else:
             self.disc_date = Time(str(disc_date), format='iso')
         #self.disc_date = Time(str(osc.loc[name, 'Disc. Date']), format='iso')
+        #self.max_date = Time(str(osc.loc[name, 'Max Date']), format='iso')
         self.mmax = osc.loc[name, 'mmax']
         self.host = osc.loc[name, 'Host Name']
         self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
         self.dec = Angle(osc.loc[name, 'Dec.'] + ' deg')
         self.z = osc.loc[name, 'z']
         self.type = osc.loc[name, 'Type']
+        #self.refs = osc.loc[name, 'References'].split(',')
 
 
 class Fits:

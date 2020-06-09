@@ -16,7 +16,7 @@ def fix_ang(ang):
     return ang
 
 
-csvfile = 'ref/OSC-pre2014-expt.csv'
+csvfile = 'ref/OSC-pre2014-v2.csv'
 osc = pd.read_csv(csvfile, quotechar='"',skipinitialspace=True)
 print(osc)
 
@@ -31,6 +31,15 @@ for date in osc['Disc. Date']:
     else:
         newdates.append(date)
 osc['Disc. Date'] = pd.Series(newdates, dtype=str)
+
+# Replace maximum date with ISO value
+newdates = []
+for date in osc['Max Date']:
+    if not pd.isna(date):
+        newdates.append('-'.join(str(date).split('/')))
+    else:
+        newdates.append(date)
+osc['Max Date'] = pd.Series(newdates, dtype=str)
 
 # Replace multiple R.A. values with the most precise value
 newra = []
@@ -60,4 +69,4 @@ osc['z'] = newz
 
 print(osc)
 
-osc.to_csv('ref/OSC-pre2014-expt-clean.csv', index=False)
+osc.to_csv('ref/OSC-pre2014-v2-clean.csv', index=False)

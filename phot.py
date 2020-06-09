@@ -164,7 +164,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Read clean OSC csv
-    osc = utils.import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
+    osc = utils.import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
 
     fits_dir = args.fits_dir
 

@@ -42,7 +42,11 @@ def classify_fits(fits_file):
     else:
         pre = post = np.nan
 
-    return [f.filename, category, epochs, pre, post]
+    disc_date = f.sn.disc_date
+    if pd.notna(disc_date):
+        disc_date.out_subfmt = 'date'
+        disc_date = disc_date.iso
+    return [f.filename, disc_date, category, epochs, pre, post]
 
 
 if __name__ == '__main__':
@@ -53,7 +57,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Read clean OSC csv
-    osc = utils.import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
+    osc = utils.import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
     
     fits_dir = args.fits_dir
     fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
@@ -63,7 +67,7 @@ if __name__ == '__main__':
         categories = list(tqdm(pool.imap(classify_fits, fits_files), 
                 total=len(fits_files)))
 
-    df = pd.DataFrame(np.array(categories), columns=['File', 'Category', 
+    df = pd.DataFrame(np.array(categories), columns=['File', 'Disc. Date', 'Category', 
             'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN'])
     try:
         df.to_csv('out/fits_categories.csv', index=False)

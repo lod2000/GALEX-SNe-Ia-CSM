@@ -3,6 +3,9 @@ import numpy as np
 
 from astropy.coordinates import SkyCoord
 import astropy.table as tbl
+from astropy.stats import sigma_clipped_stats
+
+from photutils import DAOStarFinder
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -12,6 +15,15 @@ from tqdm import tqdm
 
 import phot
 import utils
+
+
+def find_stars(data, threshold=10., fwhm=3.):
+    mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+    if std == 0.:
+        std = np.std(data)
+    daofind = DAOStarFinder(threshold = threshold * std, fwhm=fwhm)
+    sources = daofind(data - median)
+    return sources
 
 
 '''
@@ -24,10 +36,13 @@ epoch: index of specific image
 def get_stars(fits_obj, epoch):
     # DAOPhot star locations
     img = fits_obj.data[epoch]
-    stars = phot.find_stars(img, threshold=20)
+    stars = find_stars(img, threshold=5)
 
     # GALEX magnitude conversion
-    stars['ab_mag'] = utils.galex_ab_mag(stars['flux'], fits_obj.band)
+    try:
+        stars['ab_mag'] = utils.galex_ab_mag(stars['flux'], fits_obj.band)
+    except TypeError:
+            print(stars)
     stars['delta_mag'] = utils.galex_delta_mag(stars['flux'], fits_obj.band, fits_obj.expts[epoch])
 
     # Convert pixels to sky coordinates
@@ -74,5 +89,7 @@ def plot_sys_error(fits_file):
 
 if __name__ == '__main__':
     single_img_fits = '/mnt/d/GALEX_SNeIa_REU/fits/ASASSN-13ch-FUV.fits.gz'
-    many_img_fits = '/mnt/d/GALEX_SNeIa_REU/fits/PTF12hdb-NUV.fits.gz'
-    plot_sys_error(Path(many_img_fits))
+    two_img_fits = 'sample/ASASSN-13cp-NUV.fits.gz'
+    many_img_fits = ['/mnt/d/GALEX_SNeIa_REU/fits/PTF12hdb-NUV.fits.gz',
+            'sample/SN2006lo-NUV.fits.gz']
+    plot_sys_error(Path(many_img_fits[1]))

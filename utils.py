@@ -56,19 +56,10 @@ def sn2fits(sn, band):
     return sn.replace(':','_').replace(' ','_') + '-' + band + '.fits.gz'
 
 
-osc = import_osc(Path('ref/OSC-pre2014-expt-clean.csv'))
+osc = import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
 
 class SN:
     def __init__(self, fits_file):
-        '''
-        name = '-'.join(fits_file.name.split('-')[:-1])
-        name = name.replace('_', ':')
-        try:
-            osc.loc[name]
-        except KeyError as e:
-            name = name.replace(':', ' ')
-        self.name = name
-        '''
         name = fits2sn(fits_file, osc)
         self.name = name
         # Discovery date is sometimes incomplete
@@ -78,12 +69,14 @@ class SN:
         else:
             self.disc_date = Time(str(disc_date), format='iso')
         #self.disc_date = Time(str(osc.loc[name, 'Disc. Date']), format='iso')
+        #self.max_date = Time(str(osc.loc[name, 'Max Date']), format='iso')
         self.mmax = osc.loc[name, 'mmax']
         self.host = osc.loc[name, 'Host Name']
         self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
         self.dec = Angle(osc.loc[name, 'Dec.'] + ' deg')
         self.z = osc.loc[name, 'z']
         self.type = osc.loc[name, 'Type']
+        #self.refs = osc.loc[name, 'References'].split(',')
 
 
 class Fits:
@@ -101,8 +94,13 @@ class Fits:
             expts = [self.header['EXPT'+str(i)] for i in range(exposures)]
             tmeans = [self.header['TMEAN'+str(i)] for i in range(exposures)]
         except KeyError:
-            expts = [self.header['EXPTIME'] / exposures] * exposures
-            tmeans = []
+            #expts = [self.header['EXPTIME'] / exposures] * exposures
+            if exposures == 1:
+                expts = [self.header['EXPTIME']]
+                tmeans = [(self.header['EXPEND'] + self.header['EXPSTART']) / 2]
+            else:
+                expts = []
+                tmeans = []
         self.expts = np.array(expts)
         self.tmeans = np.array(tmeans)
         self.wcs = WCS(self.header)

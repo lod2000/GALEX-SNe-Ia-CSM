@@ -1,8 +1,12 @@
+#!/usr/bin/env python
+
 import numpy as np
 import pandas as pd
 
 from pathlib import Path
 from tqdm import tqdm
+import multiprocessing as mp
+import argparse
 
 from astropy import units as u
 from astropy.coordinates import SkyCoord
@@ -16,11 +20,8 @@ from photutils import CircularAperture
 from photutils import aperture_photometry
 from photutils import CircularAnnulus
 from photutils.utils import calc_total_error
-from photutils import DAOStarFinder
 
 import utils
-
-osc = utils.osc
 
 '''
 Multi-aperture photometry using a circular aperture with sigma-clipped annulus
@@ -84,6 +85,7 @@ def multi_aper_phot(data, expt, band, positions, wcs, r=3., r_in=6., r_out=9.):
 Run photometry on all images in a single fits file
 
 fits_file: pathlib.Path
+positions: list of positions (pixels or SkyCoords)
 '''
 def fits_phot(fits_file, positions, r=3., r_in=6., r_out=9.):
     fits = utils.Fits(fits_file)
@@ -110,22 +112,81 @@ def fits_phot(fits_file, positions, r=3., r_in=6., r_out=9.):
             and tmeans[i] > sn.disc_date.gps]
         return indices
         '''
-    return cps, cps_err
+    return [fits.filename, cps, cps_err]
 
 
-def find_stars(data, threshold=10., fwhm=3.):
-    mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-    if std == 0.:
-        std = np.std(data)
-    daofind = DAOStarFinder(threshold = threshold * std, fwhm=fwhm)
-    sources = daofind(data - median)
-    return sources
+'''
+Run photometry on center of all images in a single fits file
+
+fits_file: pathlib.Path
+'''
+def sn_phot(fits_file, r=3., r_in=6., r_out=9.):
+    f = utils.Fits(fits_file)
+    if len(f.expts) > 0:
+        positions = [(f.header['CRPIX1'], f.header['CRPIX2'])]
+        if f.header['NAXIS'] == 2:
+            f.data = np.array([f.data])
+
+        baseline_phot = multi_aper_phot(f.data[0], f.expts[0], f.band, positions,
+                f.wcs, r, r_in, r_out)
+        baseline_cps = baseline_phot['aper_sum_bkgsub']
+        baseline_err = baseline_phot['aper_sum_bkgsub_err']
+
+        cps = []
+        cps_err = []
+        for i, img in enumerate(f.data):
+            phot = multi_aper_phot(img, f.expts[i], f.band, positions,
+                    f.wcs, r, r_in, r_out)
+            cps.append(phot['aper_sum_bkgsub'] - baseline_cps)
+            cps_err.append(np.sqrt(phot['aper_sum_bkgsub_err']**2 + baseline_err**2))
+        filename = np.array([[f.filename]] * f.data.shape[0])
+        img = np.array([np.arange(f.data.shape[0])]).transpose()
+        cps = np.array(cps)
+        cps_err = np.array(cps_err)
+        '''
+        # Find images (if any) with significantly higher photometry than average,
+        # AND which are after the discovery date of the supernova
+        indices = [[sn, sn.band, i] for i in range(len(data)) if 
+            sums[i] > np.mean(sums) + 2 * np.std(sums) 
+            and tmeans[i] > sn.disc_date.gps]
+        return indices
+        '''
+        return np.hstack([filename, img, cps, cps_err])
+    else:
+        return np.array([[f.filename, np.nan, np.nan, np.nan]])
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Returns photometry at center\
+            of each FITS image.')
+    parser.add_argument('fits_dir', metavar='dir', type=Path, 
+            help='path to FITS data directory')
+    args = parser.parse_args()
 
-    noteworthy = []
+    # Read clean OSC csv
+    osc = utils.import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
 
+    fits_dir = args.fits_dir
+
+    # Read classification csv, selecting those with images pre and post discovery.
+    # or multiple images post-discovery
+    classified = pd.read_csv(Path('out/fits_categories.csv'), index_col='File')
+    fits_files = classified[(classified['Category'] == 'post_disc') | \
+            (classified['Category'] == 'pre_post_disc')].index
+    fits_files = [fits_dir / f for f in fits_files]
+    #fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
+
+    with mp.Pool() as pool:
+        cps = list(tqdm(pool.imap(sn_phot, fits_files), total=len(fits_files)))
+
+    df = pd.DataFrame(np.concatenate(cps), columns=['File', 'Epoch', 'CPS', 'CPS Error'])
+    #df = df[np.logical_not(pd.isna(df['CPS']))]
+    try:
+        df.to_csv('out/cps.csv', index=False)
+    except PermissionError:
+        df.to_csv('out/cps-tmp.csv', index=False)
+
+    '''
     for fits_file in tqdm(utils.get_fits_files(
             Path('/mnt/exthdd/GALEX_SNeIa_REU/fits/'), 'pre_post_discovery.csv')
             ):
@@ -135,6 +196,7 @@ if __name__ == '__main__':
 
     noteworthy = np.concatenate(np.array(noteworthy))
     np.savetxt('noteworthy.csv', noteworthy, delimiter=',', fmt='%s')
+    '''
 
     #fits_path = Path('/mnt/d/GALEX_SNeIa_REU/fits/CSS100912_223118+010516-NUV.fits.gz')
     #print(sn_aperture_phot(fits_path))

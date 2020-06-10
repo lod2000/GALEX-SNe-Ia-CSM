@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import os
 
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(figsize=(6.0, 4.2))
 
 os.chdir('filters')
 filters = sorted(os.listdir(os.getcwd()))
@@ -40,4 +40,5 @@ ax.set_xlim((1000, 3500))
 ax.set_ylabel('Transmission')
 ax.legend()
 
+plt.savefig(Path('../figs/filters.png'), bbox_inches='tight', dpi=300)
 plt.show()

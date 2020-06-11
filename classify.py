@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.time import Time
+from astropy import units as u
 from tqdm import tqdm
 import utils
 from pathlib import Path
@@ -11,7 +12,10 @@ import argparse
 import multiprocessing as mp
 
 def classify_fits(fits_file):
-    f = utils.Fits(fits_file)
+    try:
+        f = utils.Fits(fits_file)
+    except KeyError:
+        return [fits_file.name] + [np.nan] * 7
     exp_range = Time([f.header['EXPSTART'], f.header['EXPEND']], format='gps')
 
     # Categorize based on discovery and image dates
@@ -20,9 +24,6 @@ def classify_fits(fits_file):
     if f.header['NAXIS'] == 2:
         category = 'single'
         epochs = 1
-    # Some dates in the csv are missing or aren't specific enough
-    elif pd.isna(f.sn.disc_date):
-        category = 'unknown'
     elif exp_range.iso[1] < f.sn.disc_date:
         category = 'pre_disc'
     elif exp_range.iso[0] > f.sn.disc_date:
@@ -46,7 +47,8 @@ def classify_fits(fits_file):
     if pd.notna(disc_date):
         disc_date.out_subfmt = 'date'
         disc_date = disc_date.iso
-    return [f.filename, disc_date, category, epochs, pre, post]
+    return [f.filename, disc_date, f.ra.to_string(unit=u.hour), 
+            f.dec.to_string(unit=u.degree), category, epochs, pre, post]
 
 
 if __name__ == '__main__':
@@ -67,8 +69,12 @@ if __name__ == '__main__':
         categories = list(tqdm(pool.imap(classify_fits, fits_files), 
                 total=len(fits_files)))
 
-    df = pd.DataFrame(np.array(categories), columns=['File', 'Disc. Date', 'Category', 
-            'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN'])
+    df = pd.DataFrame(np.array(categories), columns=['File', 'Disc. Date', 'R.A.',
+            'Dec.', 'Category', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN'])
+    skipped = df[df['Disc. Date'].isna()]
+    print(str(len(df.index)) + ' files skipped becausue of missing entry in OSC database.')
+    df = df.dropna()
+
     try:
         df.to_csv('out/fits_categories.csv', index=False)
     # In case I forget to close the CSV first...

@@ -104,4 +104,6 @@ class Fits:
         self.expts = np.array(expts)
         self.tmeans = np.array(tmeans)
         self.wcs = WCS(self.header)
+        self.ra = Angle(str(self.header['CRVAL1'])+'d')
+        self.dec = Angle(str(self.header['CRVAL2'])+'d')
 

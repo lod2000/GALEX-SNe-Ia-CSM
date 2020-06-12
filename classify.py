@@ -15,7 +15,7 @@ def classify_fits(fits_file):
     try:
         f = utils.Fits(fits_file)
     except KeyError:
-        return [fits_file.name] + [np.nan] * 7
+        return [fits_file.name] + [np.nan] * 8
     exp_range = Time([f.header['EXPSTART'], f.header['EXPEND']], format='gps')
 
     # Categorize based on discovery and image dates
@@ -47,7 +47,7 @@ def classify_fits(fits_file):
     if pd.notna(disc_date):
         disc_date.out_subfmt = 'date'
         disc_date = disc_date.iso
-    return [f.filename, disc_date, f.ra.to_string(unit=u.hour), 
+    return [f.filename, f.sn.name, disc_date, f.ra.to_string(unit=u.hour), 
             f.dec.to_string(unit=u.degree), category, epochs, pre, post]
 
 
@@ -69,14 +69,18 @@ if __name__ == '__main__':
         categories = list(tqdm(pool.imap(classify_fits, fits_files), 
                 total=len(fits_files)))
 
-    df = pd.DataFrame(np.array(categories), columns=['File', 'Disc. Date', 'R.A.',
+    df = pd.DataFrame(np.array(categories), columns=['File', 'SN', 'Disc. Date', 'R.A.',
             'Dec.', 'Category', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN'])
-    skipped = df[df['Disc. Date'].isna()]
-    print(str(len(df.index)) + ' files skipped becausue of missing entry in OSC database.')
-    df = df.dropna()
+    # Drop entries with no corresponding OSC entry
+    skipped = df[pd.isna(df[df['Disc. Date'] == 'nan'])]
+    print(str(len(skipped.index)) + ' files skipped becausue of missing entry in OSC database.')
+    df = df[df['Disc. Date'] != 'nan'].dropna()
+
+    notable = df[(df['Category'] == 'post_disc') | (df['Category'] == 'pre_post_disc')]
 
     try:
         df.to_csv('out/fits_categories.csv', index=False)
+        notable.to_csv('out/fits_notable.csv', index=False)
     # In case I forget to close the CSV first...
     except PermissionError:
         df.to_csv('out/fits_categories-tmp.csv', index=False)

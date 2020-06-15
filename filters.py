@@ -7,9 +7,13 @@ import os
 fig, ax = plt.subplots(figsize=(6.0, 4.2))
 
 os.chdir('filters')
-filters = sorted(os.listdir(os.getcwd()))
+filters = ['GALEX.FUV.dat', 'GALEX.NUV.dat', 'Swift_UVOT.UVW2.dat',
+        'Swift_UVOT.UVM2.dat', 'Swift_UVOT.UVW1.dat', 'HST_WFC3_UVIS2.F275W.dat']
+colors = ['maroon', 'red', 'darkgreen', 'limegreen', 'chartreuse', 'indigo']
+alphas = [1, 1, 0.6, 0.6, 0.6, 0.8]
+styles = ['-', '-', '--', '--', '--', ':']
 
-for f in filters:
+for i, f in enumerate(filters):
     inst = f.split('.')[0].replace('_',' ')
     name = f.split('.')[-2]
     array = np.loadtxt(f, delimiter=' ')
@@ -22,21 +26,11 @@ for f in filters:
     if inst == 'Swift UVOT':
         y = y/(np.pi * 15**2) # objective diameter: 30 cm
 
-    # make GALEX curves more visible
-    alpha = 1 if inst=='GALEX' else 0.8
-    if 'Swift' in inst:
-        style = '--'
-    elif 'HST' in inst:
-        style = ':'
-    else:
-        style = '-'
-
-    ax.plot(freq, y, label=' '.join([inst, name]), linestyle=style, alpha=alpha)
+    ax.plot(freq, y, label=' '.join([inst, name]), linestyle=styles[i], 
+            alpha=alphas[i], color=colors[i])
 
 ax.set_xlabel('Wavelength (Å)')
 ax.set_xlim((1000, 3500))
-#ax.set_yscale('log')
-#ax.set_ylim((5e-3,0.14))
 ax.set_ylabel('Transmission')
 ax.legend()
 

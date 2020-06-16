@@ -31,14 +31,16 @@ def main():
     ref = utils.import_osc(Path(args.reference))
     
     fits_info = compile_fits(args.fits_dir, ref)
+    final_sample = get_final_sample(fits_info)
     
     try:
-        fits_info.to_csv('out/fitsinfo.csv', index=False)
+        final_sample.to_csv('out/fitsinfo.csv', index=False)
     # In case I forget to close the CSV first...
     except PermissionError:
-        fits_info.to_csv('out/fitsinfo-tmp.csv', index=False)
+        final_sample.to_csv('out/fitsinfo-tmp.csv', index=False)
 
     plot_observations(fits_info)
+    print_quick_stats(fits_info, final_sample, ref)
 
 
 def import_fits(fits_file, ref):
@@ -96,12 +98,53 @@ def compile_fits(fits_dir, ref):
     return fits_info
 
 
+def get_final_sample(fits_info):
+    """
+    Strips out FITS files with only a single observation, or with only 
+    pre-discovery observations
+    Input:
+        fits_info (DataFrame): output from compile_fits
+    Output:
+        sample (DataFrame): stripped-down final sample
+    """
+
+    return fits_info[(fits_info['Epochs Post-SN'] > 1) | \
+        ((fits_info['Epochs Post-SN'] > 0) & (fits_info['Epochs Pre-SN'] > 0))]
+
+
+def print_quick_stats(fits_info, final_sample, ref):
+    """
+    Prints quick statistics about sample
+    Input:
+        fits_info (DataFrame): output from compile_fits
+        final_sample (DataFrame): output from get_final_sample
+        ref (DataFrame): SN reference info, e.g. from OSC
+    """
+
+    print('\nQuick stats:')
+    print('\tnumber of reference SNe: ' + str(len(ref)))
+    sne = fits_info.drop_duplicates(['Name'])
+    print('\tnumber of SNe with GALEX data: ' + str(len(sne)))
+    post = sne[(sne['Epochs Post-SN'] > 1) & (sne['Epochs Pre-SN'] == 0)]
+    print('\tnumber of SNe with multiple observations after discovery: ' + str(len(post)))
+    both = sne[(sne['Epochs Post-SN'] > 0) & (sne['Epochs Pre-SN'] > 0)]
+    print('\tnumber of SNe with observations before and after discovery: ' + str(len(both)))
+    final_sne = final_sample.drop_duplicates(['Name'])
+    print('\tfinal sample size: ' + str(len(final_sne)))
+    fuv = final_sample[final_sample['Band'] == 'FUV']
+    print('\tnumber of final SNe with FUV observations: ' + str(len(fuv)))
+    nuv = final_sample[final_sample['Band'] == 'NUV']
+    print('\tnumber of final SNe with NUV observations: ' + str(len(nuv)))
+
+
 def plot_observations(fits_info):
     """
     Plots histogram of the number of SNe with a given number of observations
     Inputs:
         fits_info (DataFrame): output from compile_fits
     """
+
+    print('Plotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
 
     fig, axes = plt.subplots(1,2, figsize=(12.0, 4.2))

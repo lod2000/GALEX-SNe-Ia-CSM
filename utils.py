@@ -59,24 +59,26 @@ def sn2fits(sn, band):
 osc = import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
 
 class SN:
-    def __init__(self, fits_file):
-        name = fits2sn(fits_file, osc)
+    def __init__(self, fits_file, ref):
+        name = fits2sn(fits_file, ref)
         self.name = name
         # Discovery date is sometimes incomplete
-        disc_date = osc.loc[name, 'Disc. Date']
+        disc_date = ref.loc[name, 'Disc. Date']
+        '''
         if len(str(disc_date).split('-')) < 3:
             self.disc_date = np.nan
         else:
-            self.disc_date = Time(str(disc_date), format='iso')
-        #self.disc_date = Time(str(osc.loc[name, 'Disc. Date']), format='iso')
-        #self.max_date = Time(str(osc.loc[name, 'Max Date']), format='iso')
-        self.mmax = osc.loc[name, 'mmax']
-        self.host = osc.loc[name, 'Host Name']
-        self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
-        self.dec = Angle(osc.loc[name, 'Dec.'] + ' deg')
-        self.z = osc.loc[name, 'z']
-        self.type = osc.loc[name, 'Type']
-        #self.refs = osc.loc[name, 'References'].split(',')
+        '''
+        self.disc_date = Time(str(disc_date), format='iso', out_subfmt='date')
+        #self.disc_date = Time(str(ref.loc[name, 'Disc. Date']), format='iso')
+        #self.max_date = Time(str(ref.loc[name, 'Max Date']), format='iso')
+        self.mmax = ref.loc[name, 'mmax']
+        self.host = ref.loc[name, 'Host Name']
+        self.ra = Angle(ref.loc[name, 'R.A.'] + ' hours')
+        self.dec = Angle(ref.loc[name, 'Dec.'] + ' deg')
+        self.z = ref.loc[name, 'z']
+        self.type = ref.loc[name, 'Type']
+        #self.refs = ref.loc[name, 'References'].split(',')
 
 
 class Fits:
@@ -84,26 +86,23 @@ class Fits:
         with fits.open(fits_file) as hdu:
             self.header = hdu[0].header
             self.data = hdu[0].data
-        self.sn = SN(fits_file)
+        #self.sn = SN(fits_file)
         self.band = fits_file.name.split('-')[-1].split('.')[0]
         self.path = fits_file
         self.filename = fits_file.name
-        # exposure times (some fits images don't have individual exposure times)
-        exposures = self.header['NAXIS3'] if self.header['NAXIS'] == 3 else 1
-        try:
-            expts = [self.header['EXPT'+str(i)] for i in range(exposures)]
-            tmeans = [self.header['TMEAN'+str(i)] for i in range(exposures)]
-        except KeyError:
-            #expts = [self.header['EXPTIME'] / exposures] * exposures
-            if exposures == 1:
-                expts = [self.header['EXPTIME']]
-                tmeans = [(self.header['EXPEND'] + self.header['EXPSTART']) / 2]
-            else:
-                expts = []
-                tmeans = []
+        # exposure times (array for single image is 2D)
+        if self.header['NAXIS'] == 2:
+            self.epochs = 1
+            expts = [self.header['EXPTIME']]
+            tmeans = [(self.header['EXPEND'] + self.header['EXPSTART']) / 2]
+        else:
+            self.epochs = self.header['NAXIS3']
+            expts = [self.header['EXPT'+str(i)] for i in range(self.epochs)]
+            tmeans = [self.header['TMEAN'+str(i)] for i in range(self.epochs)]
         self.expts = np.array(expts)
-        self.tmeans = np.array(tmeans)
+        self.tmeans = Time(np.array(tmeans), format='gps')
         self.wcs = WCS(self.header)
+        # RA and Dec are given in degrees
         self.ra = Angle(str(self.header['CRVAL1'])+'d')
         self.dec = Angle(str(self.header['CRVAL2'])+'d')
 

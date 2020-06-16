@@ -4,7 +4,6 @@ import matplotlib.ticker as tkr
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from astropy.time import Time
 
 df = pd.read_csv(Path('out/fits_categories.csv'), index_col='File')
 df = df[pd.notna(df['Disc. Date'])]
@@ -14,9 +13,6 @@ fig, axes = plt.subplots(1,2, figsize=(12.0, 4.2))
 
 for i, band in enumerate(bands):
     band_df = df[df.index.str.contains(band)]
-    #band_df = df[(pd.notna(df['Disc. Date'])) &
-    #        (band in df.index.astype('str'))]
-    print(band_df)
     
     # number of SNe per number of epochs for each category
     epochs = band_df['Total Epochs']
@@ -26,10 +22,10 @@ for i, band in enumerate(bands):
     ax = axes[i]
     b = 11
     bins = np.logspace(0, np.log10(np.max(epochs)), b)
-    ax.hist(epochs, bins=bins, histtype='step', log=False, label='All SNe')
-    ax.hist(both, bins=bins, histtype='step', log=False, color='orange',
+    ax.hist(epochs, bins=bins, histtype='step', log=False, label='All SNe', align='left')
+    ax.hist(both, bins=bins, histtype='step', log=False, color='orange', align='left',
             label='SNe with epochs before \nand after discovery', linestyle='--')
-    ax.hist(post, bins=bins, histtype='step', log=False, color='green',
+    ax.hist(post, bins=bins, histtype='step', log=False, color='green', align='left',
             label='SNe with multiple epochs \nafter discovery', linestyle=':')
 
     handles, labels = plt.gca().get_legend_handles_labels()

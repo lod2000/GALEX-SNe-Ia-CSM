@@ -62,13 +62,7 @@ class SN:
     def __init__(self, fits_file, ref):
         name = fits2sn(fits_file, ref)
         self.name = name
-        # Discovery date is sometimes incomplete
         disc_date = ref.loc[name, 'Disc. Date']
-        '''
-        if len(str(disc_date).split('-')) < 3:
-            self.disc_date = np.nan
-        else:
-        '''
         self.disc_date = Time(str(disc_date), format='iso', out_subfmt='date')
         #self.disc_date = Time(str(ref.loc[name, 'Disc. Date']), format='iso')
         #self.max_date = Time(str(ref.loc[name, 'Max Date']), format='iso')
@@ -78,7 +72,7 @@ class SN:
         self.dec = Angle(ref.loc[name, 'Dec.'] + ' deg')
         self.z = ref.loc[name, 'z']
         self.type = ref.loc[name, 'Type']
-        #self.refs = ref.loc[name, 'References'].split(',')
+        self.refs = ref.loc[name, 'References'].split(',')
 
 
 class Fits:
@@ -86,7 +80,6 @@ class Fits:
         with fits.open(fits_file) as hdu:
             self.header = hdu[0].header
             self.data = hdu[0].data
-        #self.sn = SN(fits_file)
         self.band = fits_file.name.split('-')[-1].split('.')[0]
         self.path = fits_file
         self.filename = fits_file.name

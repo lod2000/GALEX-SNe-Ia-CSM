@@ -23,6 +23,12 @@ print(osc)
 # Remove duplicate rows
 osc = osc.drop_duplicates(['Name'], keep='first')
 
+# Remove entries with incomplete / missing date
+osc.replace('', float('NaN'), inplace=True)
+osc.dropna(subset=['Disc. Date'], inplace=True)
+osc = osc[osc['Disc. Date'].apply(lambda d: len(d) == 10)]
+osc.reset_index(inplace=True, drop=True)
+
 # Replace discovery date with ISO value
 newdates = []
 for date in osc['Disc. Date']:

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import platform
 from astropy.time import Time
 from astropy.coordinates import Angle
 from astropy.io import fits
@@ -24,12 +25,11 @@ def galex_delta_mag(cps, band, exp_time):
 
 
 # Get list of FITS file names from data directory
-def get_fits_files(fits_dir, csv=None):
-    if csv:
-        fits_list = np.loadtxt(csv, delimiter=',', dtype=str)
-        return [fits_dir / sn2fits(f[0], f[1]) for f in fits_list]
-    else:
-        return [f for f in fits_dir.glob('**/*.fits.gz')]
+def get_fits_files(fits_dir, ref=[]):
+    fits_list = [f for f in fits_dir.glob('**/*.fits.gz')]
+    if len(ref) > 0:
+        fits_list = [f for f in fits_list if fits2sn(f, ref) in ref.index]
+    return fits_list
 
 
 # Import Open Supernova Catalog csv file
@@ -39,24 +39,28 @@ def import_osc(osc_csv):
 
 # Convert FITS file name to SN name, as listed in OSC sheet
 # Required because Windows doesn't like ':' in file names
-def fits2sn(fits_file, osc):
+def fits2sn(fits_file, ref):
     # Pull SN name from fits file name
     sn_name = '-'.join(fits_file.name.split('-')[:-1])
     # '_' may represent either ':' or ' ' (thanks Windows)
     sn_name = sn_name.replace('_', ' ')
     try:
-        osc.loc[sn_name]
+        ref.loc[sn_name]
     except KeyError as e:
         sn_name = sn_name.replace(' ', ':')
     return sn_name
 
 
 # Convert SN name to FITS file name
-def sn2fits(sn, band):
-    return sn.replace(':','_').replace(' ','_') + '-' + band + '.fits.gz'
+def sn2fits(sn, band=None):
+    fits_name = sn.replace(' ','_')
+    if platform.system() == 'Windows':
+        fits_name = fits_name.replace(':','_')
+    if band:
+        return fits_name + '-' + band + '.fits.gz'
+    else:
+        return fits_name + '-FUV.fits.gz', fits_name + '-NUV.fits.gz'
 
-
-osc = import_osc(Path('ref/OSC-pre2014-v2-clean.csv'))
 
 class SN:
     def __init__(self, fits_file, ref):

@@ -12,9 +12,8 @@ from time import sleep
 QUERY_RADIUS = 1. # arcmin
 
 def main():
-    #sample = pd.Series(['ASASSN-13av', 'PTF11kx', 'SDSS-II SN 14619', 'SN2007on', 'CSS091127:094447+083137'])
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sample = fits_info.index.drop_duplicates()
+    sample = pd.Series(fits_info.index.drop_duplicates())
     sne = []
     objnames = []
     redshifts = []

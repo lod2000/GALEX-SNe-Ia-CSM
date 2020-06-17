@@ -2,19 +2,26 @@
 
 import numpy as np
 import pandas as pd
+
 from astropy.io import fits
 from astropy.time import Time
 from astropy import units as u
+from astropy.utils.exceptions import AstropyWarning
+
 from tqdm import tqdm
-import utils
 from pathlib import Path
 import argparse
+import warnings
+
 import multiprocessing as mp
 from itertools import repeat
 from functools import partial
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tkr
+
+import utils
 
 def main():
 
@@ -27,10 +34,14 @@ def main():
             CSV with SN info', default='ref/osc-pre2014-v2-clean.csv')
     args = parser.parse_args()
 
+    # Suppress Astropy warnings about, e.g., "dubious years"
+    warnings.simplefilter('ignore', category=AstropyWarning)
+
     # Read clean reference csv (e.g. Open Supernova Catalog)
     ref = utils.import_osc(Path(args.reference))
     
-    fits_info = compile_fits(args.fits_dir, ref)
+    fits_files = utils.get_fits_files(args.fits_dir, ref)
+    fits_info = compile_fits(fits_files, ref)
     final_sample = get_final_sample(fits_info)
     
     try:
@@ -58,7 +69,7 @@ def import_fits(fits_file, ref):
         f = utils.Fits(fits_file)
         sn = utils.SN(fits_file, ref)
     except KeyError:
-        # Skip if SN isn't found in reference info
+        # Skip if SN isn't found in reference info, or FITS file is incomplete
         return []
 
     # Count number of GALEX epochs before / after discovery
@@ -70,17 +81,17 @@ def import_fits(fits_file, ref):
             f.epochs, pre, post, f.tmeans[0], f.tmeans[-1]]
 
 
-def compile_fits(fits_dir, ref):
+def compile_fits(fits_files, ref):
     """
     Imports all FITS files and compiles info in single DataFrame
     Inputs:
-        fits_dir (Path): parent directory of FITS files
+        fits_files (list): list of paths of FITS files
         ref (DataFrame): SN reference info, e.g. from OSC
     Outputs:
         fits_info (DataFrame): table of info about all FITS files in fits_dir
     """
 
-    fits_files = [f for f in fits_dir.glob('**/*.fits.gz')]
+    print('\nCompiling FITS info...')
 
     with mp.Pool() as pool:
         stats = list(tqdm(
@@ -98,6 +109,30 @@ def compile_fits(fits_dir, ref):
     return fits_info
 
 
+def get_post_obs(fits_info):
+    """
+    Returns FITS files with multiple post-discovery observations
+    Input:
+        fits_info (DataFrame): output from compile_fits
+    """
+
+    post = fits_info['Epochs Post-SN']
+    pre = fits_info['Epochs Pre-SN']
+    return fits_info[(post > 1) & (pre == 0)].reset_index(drop=True)
+
+
+def get_pre_post_obs(fits_info):
+    """
+    Returns FITS files with both pre- and post-discovery observations
+    Input:
+        fits_info (DataFrame): output from compile_fits
+    """
+
+    post = fits_info['Epochs Post-SN']
+    pre = fits_info['Epochs Pre-SN']
+    return fits_info[(post > 0) & (pre > 0)].reset_index(drop=True)
+
+
 def get_final_sample(fits_info):
     """
     Strips out FITS files with only a single observation, or with only 
@@ -108,8 +143,9 @@ def get_final_sample(fits_info):
         sample (DataFrame): stripped-down final sample
     """
 
-    return fits_info[(fits_info['Epochs Post-SN'] > 1) | \
-        ((fits_info['Epochs Post-SN'] > 0) & (fits_info['Epochs Pre-SN'] > 0))]
+    post = get_post_obs(fits_info)
+    both = get_pre_post_obs(fits_info)
+    return post.append(both).sort_values(by=['Name', 'Band']).reset_index(drop=True)
 
 
 def print_quick_stats(fits_info, final_sample, ref):
@@ -125,9 +161,9 @@ def print_quick_stats(fits_info, final_sample, ref):
     print('\tnumber of reference SNe: ' + str(len(ref)))
     sne = fits_info.drop_duplicates(['Name'])
     print('\tnumber of SNe with GALEX data: ' + str(len(sne)))
-    post = sne[(sne['Epochs Post-SN'] > 1) & (sne['Epochs Pre-SN'] == 0)]
+    post = get_post_obs(fits_info).drop_duplicates(['Name'])
     print('\tnumber of SNe with multiple observations after discovery: ' + str(len(post)))
-    both = sne[(sne['Epochs Post-SN'] > 0) & (sne['Epochs Pre-SN'] > 0)]
+    both = get_pre_post_obs(fits_info).drop_duplicates(['Name'])
     print('\tnumber of SNe with observations before and after discovery: ' + str(len(both)))
     final_sne = final_sample.drop_duplicates(['Name'])
     print('\tfinal sample size: ' + str(len(final_sne)))
@@ -144,7 +180,7 @@ def plot_observations(fits_info):
         fits_info (DataFrame): output from compile_fits
     """
 
-    print('Plotting histogram of observation frequency...')
+    print('\nPlotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
 
     fig, axes = plt.subplots(1,2, figsize=(12.0, 4.2))

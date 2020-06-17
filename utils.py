@@ -68,8 +68,8 @@ class SN:
         self.name = name
         disc_date = ref.loc[name, 'Disc. Date']
         self.disc_date = Time(str(disc_date), format='iso', out_subfmt='date')
-        #self.disc_date = Time(str(ref.loc[name, 'Disc. Date']), format='iso')
-        #self.max_date = Time(str(ref.loc[name, 'Max Date']), format='iso')
+        max_date = ref.loc[name, 'Max Date']
+        self.max_date = Time(str(max_date), format='iso', out_subfmt='date')
         self.mmax = ref.loc[name, 'mmax']
         self.host = ref.loc[name, 'Host Name']
         self.ra = Angle(ref.loc[name, 'R.A.'] + ' hours')

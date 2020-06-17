@@ -31,23 +31,27 @@ uvm2.insert(5, 'ab_mag_err', np.sqrt(uvm2['e_magnitude']**2 + 0.03**2))
 uvw2.insert(4, 'ab_mag', uvw2['magnitude'] + 1.73)
 uvw2.insert(5, 'ab_mag_err', np.sqrt(uvw2['e_magnitude']**2 + 0.03**2))
 
-plt.errorbar(uvw1['time']+xshift, uvw1['ab_mag'], yerr=uvw1['ab_mag_err'], 
-        linestyle='none', marker='.', capsize=2, elinewidth=1, label='Swift W1')
-plt.errorbar(uvm2['time']+xshift, uvm2['ab_mag'], yerr=uvm2['ab_mag_err'], 
-        linestyle='none', marker='.', capsize=2, elinewidth=1, label='Swift M2')
-plt.errorbar(uvw2['time']+xshift, uvw2['ab_mag'], yerr=uvw2['ab_mag_err'], 
-        linestyle='none', marker='.', capsize=2, elinewidth=1, label='Swift W2')
-plt.errorbar(fuv['t_mean_mjd']+xshift, fuv['mag_bgsub'], yerr=[fuv['mag_bgsub_err_2'], 
-        fuv['mag_bgsub_err_1']], linestyle='none', marker='x', capsize=2, 
-        elinewidth=1, label='GALEX FUV')
-plt.errorbar(nuv['t_mean_mjd']+xshift, nuv['mag_bgsub'], yerr=[nuv['mag_bgsub_err_2'], 
-        nuv['mag_bgsub_err_1']], linestyle='none', marker='x', capsize=2, 
-        elinewidth=1, label='GALEX NUV')
+# Plot
+x_list = [uvw1['time']+xshift, uvm2['time']+xshift, uvw2['time']+xshift, 
+        fuv['t_mean_mjd']+xshift, nuv['t_mean_mjd']+xshift]
+y_list = [uvw1['ab_mag'], uvm2['ab_mag'], uvw2['ab_mag'], fuv['mag_bgsub'], nuv['mag_bgsub']]
+yerr_list = [uvw1['ab_mag_err'], uvm2['ab_mag_err'], uvw2['ab_mag_err'], 
+        [fuv['mag_bgsub_err_2'], fuv['mag_bgsub_err_1']], [nuv['mag_bgsub_err_2'], 
+        nuv['mag_bgsub_err_1']]]
+formats = ['b.','g.','y.','mD','rD']
+marker_sizes = [6,6,6,4,4]
+labels = ['Swift W1', 'Swift M2', 'Swift W2', 'GALEX FUV', 'GALEX NUV']
+
+for x, y, yerr, f, ms, label in zip(x_list, y_list, yerr_list, formats, marker_sizes, labels):
+    markers, caps, bars = plt.errorbar(x, y, yerr=yerr, fmt=f, label=label,
+            linestyle='none', capsize=0, elinewidth=1, ms=ms)
+    [bar.set_alpha(0.8) for bar in bars]
 
 plt.xlim((0, 72))
-plt.xlabel('MJD ' + str(xshift))
+plt.xlabel('MJD' + str(xshift))
 plt.ylim((25, 13))
 plt.ylabel('AB apparent magnitude')
 plt.legend()
 
+plt.savefig('SN2007on.png')
 plt.show()

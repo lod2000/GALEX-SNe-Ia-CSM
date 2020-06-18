@@ -18,6 +18,7 @@ def main():
     sample = pd.Series(fits_info.index.drop_duplicates())
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
+    # Query NED for all SNe in sample
     ned_table = vstack([get_ned_table(sn, fits_info, ref) for sn in tqdm(sample)],
             join_type='outer', metadata_conflicts='silent')
     ned_table.remove_columns(['No.'])
@@ -34,6 +35,20 @@ def main():
 
 
 def get_ned_table(sn, fits_info, ref):
+    """
+    Searches for data about the specified supernova in NED. First it tries a
+    direct name search; if that comes up empty, or doesn't yield a redshift
+    value, then it tries to search by host galaxy name, and finally by proximity.
+    The proximity search returns the object closest to the location of the SN
+    that isn't the SN itself (if a direct name search didn't yield a redshift).
+    Inputs:
+        sn (str): name of the supernova to query
+        fits_info (DataFrame): info about FITS files
+        ref (DataFrame): info about SNe (e.g. from Open Supernova Catalog)
+    Outputs:
+        ned_table (Table): single-row astropy table with search results
+    """
+
     hostname = ref.loc[sn, 'Host Name']
     if pd.isna(hostname):
         hostname = ''
@@ -63,10 +78,6 @@ def get_ned_table(sn, fits_info, ref):
     ned_table['Host Name'] = [hostname]
     ned_table['Search Type'] = [search_type]
     return ned_table
-
-
-def is_table(ned_table):
-    return (ned_table is not None and len(ned_table) > 0)
 
 
 def query_ned_loc(ra, dec, radius=1., verb=0):
@@ -133,7 +144,12 @@ def get_ned_params(objname, verb=0):
     return redshifts, references
 
 
-#def query_ned_iau()
+def is_table(ned_table):
+    """
+    Returns whether the input NED table is real (at least one row) or not
+    (None or 0 rows)
+    """
+    return (ned_table is not None and len(ned_table) > 0)
 
 
 if __name__=='__main__':

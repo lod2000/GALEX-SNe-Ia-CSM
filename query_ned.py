@@ -6,6 +6,8 @@ from astropy.coordinates import SkyCoord
 from astropy.coordinates import Angle
 from astropy import units as u
 from astroquery.ned import Ned
+from astropy.io import ascii
+from astropy.table import vstack, Table, MaskedColumn
 from tqdm import tqdm
 from time import sleep
 
@@ -13,51 +15,58 @@ QUERY_RADIUS = 1. # arcmin
 
 def main():
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sample = pd.Series(fits_info.index.drop_duplicates()[:100])
+    sample = pd.Series(fits_info.index.drop_duplicates())
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
-    objnames = []
-    hostnames = []
-    redshifts = []
-    searchby = []
+    ned_table = vstack([get_ned_table(sn, fits_info, ref) for sn in tqdm(sample)],
+            join_type='outer', metadata_conflicts='silent')
+    ned_table.remove_columns(['No.'])
+    ned_table['Type'] = ned_table['Type'].astype(str)
+    ned_table['Redshift Flag'] = ned_table['Redshift Flag'].astype(str)
+    ned_table['Magnitude and Filter'] = ned_table['Magnitude and Filter'].astype(str)
 
-    for sn in tqdm(sample):
-        # First try a direct search by SN name
-        ned_table = query_ned_name(sn, verb=0)
-        if ned_table is not None and len(ned_table) > 0:
-            ned_name = ned_table['Object Name'][0]
-        else:
-            ned_name = ''
-        search = 'Name'
-        # Next try a search by host name
-        if (ned_table is None or len(ned_table) == 0) or ned_table['Redshift'].mask[0]:
-            hostname = ref.loc[sn, 'Host Name']
-            if pd.notna(hostname):
-                ned_table = query_ned_name(hostname)
-                search = 'Host'
-        # Finally, search by location
-        if (ned_table is None or len(ned_table) == 0) or ned_table['Redshift'].mask[0]:
-            ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
-            ned_table = query_ned_loc(ra, dec, radius=QUERY_RADIUS, verb=0)
-            ned_sorted = ned_table[np.argsort(ned_table['Separation'])]
-            ned_table = ned_sorted[0:1]
-            # If location search turns up the original object, check again
-            if ned_table['Object Name'][0] == ned_name and len(ned_sorted) > 1:
-                ned_table = ned_sorted[1:2]
-            search = 'Location'
-
-        objnames.append(ned_table['Object Name'][0])
-        hostnames.append(ref.loc[sn, 'Host Name'])
-        redshifts.append(ned_table['Redshift'][0])
-        searchby.append(search)
-
-    df = pd.concat([sample, pd.Series(hostnames), pd.Series(objnames), pd.Series(redshifts), 
-            pd.Series(searchby)], axis=1, keys=['Name', 'Host Name', 'NED Object', 'Redshift', 'Search'])
     try:
-        df.to_csv('out/redshifts.csv', index=False)
-    # In case I forget to close the CSV first...
+        ascii.write(ned_table, 'out/ned_table.csv', format='csv', overwrite=True)
+        ascii.write(ned_table, 'out/ned_table.tex', format='latex', overwrite=True)
     except PermissionError:
-        df.to_csv('out/redshifts-tmp.csv', index=False)
+        ascii.write(ned_table, 'out/ned_table-tmp.csv', format='csv', overwrite=True)
+        ascii.write(ned_table, 'out/ned_table-tmp.tex', format='latex', overwrite=True)
+
+
+def get_ned_table(sn, fits_info, ref):
+    hostname = ref.loc[sn, 'Host Name']
+    if pd.isna(hostname):
+        hostname = ''
+
+    # First try a direct search by SN name
+    ned_table = query_ned_name(sn, verb=0)
+    ned_name = ned_table['Object Name'][0] if is_table(ned_table) else ''
+    search_type = 'name'
+
+    # Next try a search by host name
+    if (not is_table(ned_table) or ned_table['Redshift'].mask[0]) and hostname != '':
+        ned_table = query_ned_name(hostname)
+        search_type = 'host'
+
+    # Finally, search by location
+    if not is_table(ned_table) or ned_table['Redshift'].mask[0]:
+        ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
+        ned_table = query_ned_loc(ra, dec, radius=QUERY_RADIUS, verb=0)
+        ned_sorted = ned_table[np.argsort(ned_table['Separation'])]
+        ned_table = ned_sorted[0:1]
+        # If location search turns up the original object, check again
+        if ned_table['Object Name'][0] == ned_name and len(ned_sorted) > 1:
+            ned_table = ned_sorted[1:2]
+        search_type = 'loc'
+
+    ned_table['SN Name'] = [sn]
+    ned_table['Host Name'] = [hostname]
+    ned_table['Search Type'] = [search_type]
+    return ned_table
+
+
+def is_table(ned_table):
+    return (ned_table is not None and len(ned_table) > 0)
 
 
 def query_ned_loc(ra, dec, radius=1., verb=0):

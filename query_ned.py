@@ -13,37 +13,46 @@ QUERY_RADIUS = 1. # arcmin
 
 def main():
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sample = pd.Series(fits_info.index.drop_duplicates())
-    sne = []
+    sample = pd.Series(fits_info.index.drop_duplicates()[:100])
+    ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
+
     objnames = []
+    hostnames = []
     redshifts = []
+    searchby = []
 
     for sn in tqdm(sample):
-        #print('\nQuerying Ned for: %s' % sn)
+        # First try a direct search by SN name
         ned_table = query_ned_name(sn, verb=0)
-        if ned_table is None or len(ned_table) == 0:
+        if ned_table is not None and len(ned_table) > 0:
+            ned_name = ned_table['Object Name'][0]
+        else:
+            ned_name = ''
+        search = 'Name'
+        # Next try a search by host name
+        if (ned_table is None or len(ned_table) == 0) or ned_table['Redshift'].mask[0]:
+            hostname = ref.loc[sn, 'Host Name']
+            if pd.notna(hostname):
+                ned_table = query_ned_name(hostname)
+                search = 'Host'
+        # Finally, search by location
+        if (ned_table is None or len(ned_table) == 0) or ned_table['Redshift'].mask[0]:
             ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
             ned_table = query_ned_loc(ra, dec, radius=QUERY_RADIUS, verb=0)
-            best = np.argsort(ned_table['Separation'])[0:1]
-            ned_table = ned_table[best]
-            #print(ned_table)
-            """
-            print('Object name query failed.')
-            ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
-            ned_table = query_ned_loc(ra, dec, radius=QUERY_RADIUS, verb=1)
-            print('Location query results:')
-            print(ned_table)
-            best3 = np.argsort(ned_table['Separation'])[:3]
-            print('Best matches:')
-            print(ned_table[best3])
-            """
-        objnames.append(ned_table['Object Name'][0])
-        redshift = ned_table['Redshift'][0] == '--'
-        if ned_table['Redshift'][0] == '--':
-            redshifts.append()
-        redshifts.append(ned_table['Redshift'][0])
+            ned_sorted = ned_table[np.argsort(ned_table['Separation'])]
+            ned_table = ned_sorted[0:1]
+            # If location search turns up the original object, check again
+            if ned_table['Object Name'][0] == ned_name and len(ned_sorted) > 1:
+                ned_table = ned_sorted[1:2]
+            search = 'Location'
 
-    df = pd.concat([sample, pd.Series(objnames), pd.Series(redshifts)], axis=1, keys=['Name', 'NED Object', 'Redshift'])
+        objnames.append(ned_table['Object Name'][0])
+        hostnames.append(ref.loc[sn, 'Host Name'])
+        redshifts.append(ned_table['Redshift'][0])
+        searchby.append(search)
+
+    df = pd.concat([sample, pd.Series(hostnames), pd.Series(objnames), pd.Series(redshifts), 
+            pd.Series(searchby)], axis=1, keys=['Name', 'Host Name', 'NED Object', 'Redshift', 'Search'])
     try:
         df.to_csv('out/redshifts.csv', index=False)
     # In case I forget to close the CSV first...

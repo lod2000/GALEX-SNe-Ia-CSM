@@ -10,28 +10,56 @@ from astropy.io import ascii
 from astropy.table import vstack, Table, MaskedColumn
 from tqdm import tqdm
 from time import sleep
+import matplotlib.pyplot as plt
 
 QUERY_RADIUS = 1. # arcmin
+NED_RESULTS_FILE = Path('out/ned_table.csv')
 
 def main():
+
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
     sample = pd.Series(fits_info.index.drop_duplicates())
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
-    # Query NED for all SNe in sample
-    ned_table = vstack([get_ned_table(sn, fits_info, ref) for sn in tqdm(sample)],
-            join_type='outer', metadata_conflicts='silent')
-    ned_table.remove_columns(['No.'])
-    ned_table['Type'] = ned_table['Type'].astype(str)
-    ned_table['Redshift Flag'] = ned_table['Redshift Flag'].astype(str)
-    ned_table['Magnitude and Filter'] = ned_table['Magnitude and Filter'].astype(str)
+    gen_tab = True
+    if NED_RESULTS_FILE.is_file():
+        i = input('Previous NED query results found. Overwrite? [y/N] ')
+        gen_tab = True if i == 'y' else False
 
-    try:
-        ascii.write(ned_table, 'out/ned_table.csv', format='csv', overwrite=True)
-        ascii.write(ned_table, 'out/ned_table.tex', format='latex', overwrite=True)
-    except PermissionError:
-        ascii.write(ned_table, 'out/ned_table-tmp.csv', format='csv', overwrite=True)
-        ascii.write(ned_table, 'out/ned_table-tmp.tex', format='latex', overwrite=True)
+    if gen_tab:
+        # Query NED for all SNe in sample
+        ned_table = vstack([get_ned_table(sn, fits_info, ref) for sn in tqdm(sample)],
+                join_type='outer', metadata_conflicts='silent')
+        ned_table.remove_columns(['No.'])
+        ned_table['Type'] = ned_table['Type'].astype(str)
+        ned_table['Redshift Flag'] = ned_table['Redshift Flag'].astype(str)
+        ned_table['Magnitude and Filter'] = ned_table['Magnitude and Filter'].astype(str)
+        ned = ned_table.to_pandas()
+
+        try:
+            ascii.write(ned_table, NED_RESULTS_FILE, format='csv', overwrite=True)
+            ascii.write(ned_table, 'out/ned_table.tex', format='latex', overwrite=True)
+        except PermissionError:
+            ascii.write(ned_table, NED_RESULTS_FILE, format='csv', overwrite=True)
+            ascii.write(ned_table, 'out/ned_table-tmp.tex', format='latex', overwrite=True)
+    else:
+        ned = pd.read_csv(NED_RESULTS_FILE, index_col='Name')
+
+    plot_redshifts(ned)
+
+
+def plot_redshifts(ned, bin_width=0.05):
+    z = ned['Redshift']
+    z = z[pd.notna(z)]
+    bins = int((max(z) - min(z)) / bin_width)
+    plt.hist(z, bins=bins)
+    plt.xlabel('z')
+    plt.xlim((0, max(z)))
+    plt.ylabel('# of SNe')
+    plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
+    plt.xlim((0,1))
+    plt.savefig(Path('out/redshifts_clipped.png'), bbox_inches='tight', dpi=300)
+    plt.close()
 
 
 def get_ned_table(sn, fits_info, ref):
@@ -74,7 +102,7 @@ def get_ned_table(sn, fits_info, ref):
             ned_table = ned_sorted[1:2]
         search_type = 'loc'
 
-    ned_table['SN Name'] = [sn]
+    ned_table['Name'] = [sn]
     ned_table['Host Name'] = [hostname]
     ned_table['Search Type'] = [search_type]
     return ned_table

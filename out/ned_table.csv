@@ -1,4 +1,4 @@
-Object Name,RA,DEC,Type,Velocity,Redshift,Redshift Flag,Magnitude and Filter,Separation,References,Notes,Photometry Points,Positions,Redshift Points,Diameter Points,Associations,SN Name,Host Name,Search Type
+Object Name,RA,DEC,Type,Velocity,Redshift,Redshift Flag,Magnitude and Filter,Separation,References,Notes,Photometry Points,Positions,Redshift Points,Diameter Points,Associations,Name,Host Name,Search Type
 1WGA J2235.3-2557,338.83583,-25.96167,GClstr,417611.0,1.393,,,,61,0,2,10,12,0,3,Adrian,1WGA J2235.3-2557,host
 WISEA J221601.17-173722.3,334.00493,-17.62295,G,357353.0,1.192,,22.2i,,9,0,32,5,1,0,0,Aki,CXO J221601.1-173722,host
 SDSS J094448.19+083154.3,146.20081,8.53177,*,,,,22.8g,0.396,0,0,5,1,0,4,0,CSS091127:094447+083137,,loc

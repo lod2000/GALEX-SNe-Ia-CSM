@@ -13,24 +13,39 @@ from tqdm import tqdm
 from astropy.coordinates import SkyCoord
 from astroquery.ned import Ned
 from astropy import units as u
+from pathlib import Path
 
 H_0 = 67.8 # km/sec/Mpc
 OMEGA_M = 0.308
 OMEGA_V = 0.692
+QUERY_RADIUS = 1. # arcmin
+NED_RESULTS_FILE = Path('out/scraped_table.csv')
+NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 
 
 def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sample = pd.Series(fits_info.index.drop_duplicates()[:10])
+    sample = pd.Series(fits_info.index.drop_duplicates())
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
-    #sn = 'SDSS-II SN 1740'
+    gen_tab = True
+    if NED_RESULTS_FILE.is_file():
+        i = input('Previous NED query results found. Overwrite? [y/N] ')
+        gen_tab = True if i == 'y' else False
 
-    df = pd.concat(
-            [parse_html(sn, fits_info, ref) for sn in tqdm(sample)]
-    ).reset_index(drop=True)
-    print(df)
+    if gen_tab:
+        # Scrape NED for all SNe in sample
+        scraped = pd.concat([parse_html(sn, fits_info, ref) for sn in tqdm(sample)],
+                ignore_index=True)
+        scraped.set_index('name')
+
+        try:
+            scraped.to_csv(NED_RESULTS_FILE, index=False)
+        except PermissionError:
+            scraped.to_csv(NED_RESULTS_FILE_TMP, index=False)
+    else:
+        ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
     
 
     '''
@@ -92,22 +107,28 @@ def main():
 
 def parse_html(sn, fits_info, ref):
 
+    host = ref.loc[sn, 'Host Name']
+    ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
+
     # First, try searching by SN name
     soup = get_soup(sn)
     df = scrape_overview(soup)
 
     # Next, try searching by host name
     if len(df) == 0 or df.loc[0,'z'] == 'N/A':
-        host = ref.loc[sn, 'Host Name']
         soup = get_soup(host)
         df = scrape_overview(soup)
 
     # Finally, try searching by location
     if len(df) == 0 or df.loc[0,'z'] == 'N/A':
-        ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
-        nearest = query_loc(ra, dec, objname=sn)
+        nearest, sep = query_loc(ra, dec, objname=sn)
+        #print(nearest)
         soup = get_soup(nearest)
         df = scrape_overview(soup)
+        df.loc[0,'sep'] = sep
+
+    df.loc[0,'name'] = sn
+    df.loc[0,'host'] = host
 
     return df
 
@@ -133,30 +154,33 @@ def query_loc(ra, dec, radius=1., objname=''):
     # If location search turns up the original object, check again
     if ned_table['Object Name'][0] == objname and len(ned_sorted) > 1:
         ned_table = ned_sorted[1:2]
-    return ned_table['Object Name'][0]
+    return ned_table['Object Name'][0], ned_table['Separation'][0]
 
 
 def scrape_overview(soup):
 
     main_mxpaths = dict(
-        name = 'NED_NamesTable.name_col1[0]',
+        objname = 'NED_MainTable.main_col2',
         ra = 'NED_PositionDataTable.posn_col11',
         dec = 'NED_PositionDataTable.posn_col12',
-        # posn_ref = '',
         z = 'NED_BasicDataTable.basic_col4',
         z_err = 'NED_BasicDataTable.basic_col6',
         v_helio = 'NED_BasicDataTable.basic_col1',
         v_helio_err = 'NED_BasicDataTable.basic_col3',
-        z_ref = 'NED_BasicDataTable.basic_col7',
         h_dist = 'NED_DerivedValuesTable.derived_col33',
         h_dist_err = 'NED_DerivedValuesTable.derived_col34',
         z_indep_dist = 'Redshift_IndependentDistances.ridist_col4[0]',
         type = 'NED_MainTable.main_col5',
         morph = "Classifications.class_col2[class_col1=='Galaxy Morphology']",
-        morph_ref = "Classifications.class_col5[class_col1]=='Galaxy Morphology']",
         a_v = 'NED_BasicDataTable.qlsize_col17',
         a_k = 'NED_BasicDataTable.qlsize_col27',
-        # a_ref = '',
+    )
+
+    ref_classes = dict(
+        posn_ref = 'ov_inside_coord_row',
+        z_ref = 'ov_inside_redshift_row',
+        morph_ref = 'ov_inside_classification_row',
+        a_ref = 'ov_inside_prititle_row',
     )
 
     df = pd.DataFrame(columns=list(main_mxpaths.keys()))
@@ -167,6 +191,14 @@ def scrape_overview(soup):
             df.loc[0, key] = val
     except AttributeError:
         pass
+
+    for key, class_ in ref_classes.items():
+        tr = soup.find('tr', class_=class_)
+        if tr:
+            a = tr.find('a')
+            if a:
+                ref = a.get_text()
+                df.loc[0, key] = ref
 
     return df
 

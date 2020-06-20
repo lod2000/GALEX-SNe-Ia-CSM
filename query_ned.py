@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 
 QUERY_RADIUS = 1. # arcmin
 NED_RESULTS_FILE = Path('out/ned_table.csv')
+NED_RESULTS_FILE_TMP = Path('out/ned_table-tmp.csv')
 
 def main():
 
@@ -40,12 +41,12 @@ def main():
             ascii.write(ned_table, NED_RESULTS_FILE, format='csv', overwrite=True)
             ascii.write(ned_table, 'out/ned_table.tex', format='latex', overwrite=True)
         except PermissionError:
-            ascii.write(ned_table, NED_RESULTS_FILE, format='csv', overwrite=True)
+            ascii.write(ned_table, NED_RESULTS_FILE_TMP, format='csv', overwrite=True)
             ascii.write(ned_table, 'out/ned_table-tmp.tex', format='latex', overwrite=True)
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='Name')
 
-    plot_redshifts(ned)
+    #plot_redshifts(ned)
 
 
 def plot_redshifts(ned, bin_width=0.05):

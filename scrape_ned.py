@@ -32,7 +32,7 @@ def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv')
     posn_info = fits_info.drop_duplicates('Name').set_index('Name')
-    sample = pd.Series(posn_info.index)
+    sample = pd.Series(posn_info.index)[:10]
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     gen_tab = True
@@ -55,6 +55,17 @@ def main():
 
 
 def get_sn(sn, fits_info, ref, verb=0):
+    """
+    Retrieve SN info from NED. Uses astroquery to retrieve target names, then
+    web scrapes to get target info.
+    Inputs:
+        sn (str): SN name
+        fits_info (DataFrame): FITS file info, with duplicate entries removed
+        ref (DataFrame): SN reference info, e.g. from OSC
+        verb (int or bool, optional): vebrose output? default: False
+    Output:
+        sn_info (DataFrame): web-scraped info from NED
+    """
 
     host = ref.loc[sn, 'Host Name']
     ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
@@ -73,20 +84,21 @@ def get_sn(sn, fits_info, ref, verb=0):
             sn_info = scrape_overview(ned_host, verb=verb)
 
     # Next, try a direct search by SN name
-    if sn_info.loc[0,'objname'] == '':
+    if sn_info.loc[0,'objname'] == '' or pd.isna(sn_info.loc[0,'z']):
         sn_query = query_name(sn, verb=verb)
         if verb:
             print(sn_query)
         if is_table(sn_query) and not sn_query['Redshift'].mask[0]:
+            sn_name = sn_query['Object Name'][0]
             sn_info = scrape_overview(sn, verb=verb)
 
     # Finally, try searching by location; if possible, use result with similar z
     # value to OSC
-    if sn_info.loc[0,'objname'] == '':
-        nearest, sep = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
-        nearest = nearest.replace('+', '%2B')
-        sn_info = scrape_overview(nearest, verb=verb)
-        sn_info.loc[0,'sep'] = sep
+    if sn_info.loc[0,'objname'] == '' or pd.isna(sn_info.loc[0,'z']):
+        nearest_query = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
+        nearest_name = nearest_query['Object Name'].replace('+', '%2B')
+        sn_info = scrape_overview(nearest_name, verb=verb)
+        sn_info.loc[0,'sep'] = nearest_query['Separation']
 
     sn_info.loc[0,'name'] = sn
     sn_info.loc[0,'host'] = host
@@ -147,15 +159,10 @@ def query_loc(ra, dec, radius=1., z=None, verb=0):
             if np.abs(object['Redshift'] - z) / z < 0.1:
                 ned_table = object
                 break
-    '''
-    # If location search turns up the original object, check again
-    if ned_table['Object Name'] == objname and len(ned_sorted) > 1:
-        ned_table = ned_sorted[1]
-    '''
     sleep(1)
     if verb:
         print(ned_table)
-    return ned_table['Object Name'], ned_table['Separation']
+    return ned_table
 
 
 def scrape_overview(objname, verb=0):
@@ -209,9 +216,11 @@ def scrape_overview(objname, verb=0):
         for key, mxpath in main_mxpaths.items():
             try:
                 val = soup.find('span', mxpath=mxpath).get_text()
+                if val == 'N/A':
+                    val = np.nan
                 object_info.loc[0, key] = val
-            except AttributeError as e:
-                raise e
+            except AttributeError:
+                continue
         for key, class_ in ref_classes.items():
             try:
                 tr = soup.find('tr', class_=class_)

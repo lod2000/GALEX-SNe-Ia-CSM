@@ -113,28 +113,28 @@ def get_sn(sn, fits_info, ref):
     ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
 
     # First, try searching by SN name
-    df = scrape_overview(sn)
+    sn_info = scrape_overview(sn)
 
     # Next, try searching by host name
-    if len(df) == 0 or df.loc[0,'z'] == 'N/A':
-        df = scrape_overview(host)
+    if len(sn_info) == 0 or sn_info.loc[0,'z'] == 'N/A':
+        sn_info = scrape_overview(host)
 
     # Finally, try searching by location
-    if len(df) == 0 or df.loc[0,'z'] == 'N/A':
+    if len(sn_info) == 0 or sn_info.loc[0,'z'] == 'N/A':
         nearest, sep = query_loc(ra, dec, objname=sn)
         #print(nearest)
-        df = scrape_overview(nearest)
-        df.loc[0,'sep'] = sep
+        sn_info = scrape_overview(nearest)
+        sn_info.loc[0,'sep'] = sep
 
-    df.loc[0,'name'] = sn
-    df.loc[0,'host'] = host
+    sn_info.loc[0,'name'] = sn
+    sn_info.loc[0,'host'] = host
 
-    return df
+    return sn_info
 
 
 def query_name(objname, verb=0):
     """
-    Query NEd based on an object name (e.g., host galaxy name)
+    Query NED based on an object name (e.g., host galaxy name)
     Inputs:
         objname (str): name of object
         verb (int or bool, optional): vebrose output? default: False
@@ -172,6 +172,14 @@ def query_loc(ra, dec, radius=1., objname=''):
 
 
 def scrape_overview(objname, verb=0):
+    """
+    Scrape NED by object name (e.g., host galaxy name or SN name)
+    Inputs:
+        objname (str): name of object
+        verb (int or bool, optional): vebrose output? default: False
+    Outputs:
+        object_info (DataFrame): info from overview table in NED
+    """
 
     # Get BeautifulSoup from URL
     url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&\
@@ -207,7 +215,7 @@ def scrape_overview(objname, verb=0):
         a_ref = 'ov_inside_prititle_row',
     )
 
-    df = pd.DataFrame(columns=list(main_mxpaths.keys()))
+    object_info = pd.DataFrame(columns=list(main_mxpaths.keys()))
 
     # Look for error messages
     err_msg = soup.find_all('div', class_='messages error', 
@@ -218,14 +226,14 @@ def scrape_overview(objname, verb=0):
         for key, mxpath in main_mxpaths.items():
             try:
                 val = soup.find('span', mxpath=mxpath).get_text()
-                df.loc[0, key] = val
+                object_info.loc[0, key] = val
             except AttributeError:
                 continue
         for key, class_ in ref_classes.items():
             try:
                 tr = soup.find('tr', class_=class_)
                 ref = tr.find('a').get_text()
-                df.loc[0, key] = ref
+                object_info.loc[0, key] = ref
             except AttributeError:
                 continue
     else:
@@ -233,7 +241,7 @@ def scrape_overview(objname, verb=0):
             print('Object name scrape failed for object: %s' % objname)
         pass
 
-    return df
+    return object_info
 
 
 if __name__ == '__main__':

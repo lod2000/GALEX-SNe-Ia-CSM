@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import numpy as np
 import pandas as pd
 import requests
@@ -26,7 +28,7 @@ NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sample = pd.Series(fits_info.index.drop_duplicates())
+    sample = pd.Series(fits_info.index.drop_duplicates()[:10])
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     gen_tab = True
@@ -36,7 +38,7 @@ def main():
 
     if gen_tab:
         # Scrape NED for all SNe in sample
-        scraped = pd.concat([parse_html(sn, fits_info, ref) for sn in tqdm(sample)],
+        scraped = pd.concat([get_sn(sn, fits_info, ref) for sn in tqdm(sample)],
                 ignore_index=True)
         scraped.set_index('name')
 
@@ -105,26 +107,23 @@ def main():
     '''
 
 
-def parse_html(sn, fits_info, ref):
+def get_sn(sn, fits_info, ref):
 
     host = ref.loc[sn, 'Host Name']
     ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
 
     # First, try searching by SN name
-    soup = get_soup(sn)
-    df = scrape_overview(soup)
+    df = scrape_overview(sn)
 
     # Next, try searching by host name
     if len(df) == 0 or df.loc[0,'z'] == 'N/A':
-        soup = get_soup(host)
-        df = scrape_overview(soup)
+        df = scrape_overview(host)
 
     # Finally, try searching by location
     if len(df) == 0 or df.loc[0,'z'] == 'N/A':
         nearest, sep = query_loc(ra, dec, objname=sn)
         #print(nearest)
-        soup = get_soup(nearest)
-        df = scrape_overview(soup)
+        df = scrape_overview(nearest)
         df.loc[0,'sep'] = sep
 
     df.loc[0,'name'] = sn
@@ -133,13 +132,28 @@ def parse_html(sn, fits_info, ref):
     return df
 
 
-def get_soup(objname):
+def query_name(objname, verb=0):
+    """
+    Query NEd based on an object name (e.g., host galaxy name)
+    Inputs:
+        objname (str): name of object
+        verb (int or bool, optional): vebrose output? default: False
+    Outputs:
+        ned_table: table of query results
+    """
 
-    url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&\
-           omegav=%s#tab_3' % (objname, H_0, OMEGA_M, OMEGA_V)
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    return soup
+    if verb:
+        print('\tsending query...')
+    try:
+        results = Ned.query_object(objname)
+        if verb:
+            print('\tcomplete')
+    except:
+        if verb:
+            print('Object name query failed for object: %s' % objname)
+        results = None
+    sleep(1)
+    return results
 
 
 def query_loc(ra, dec, radius=1., objname=''):
@@ -157,8 +171,17 @@ def query_loc(ra, dec, radius=1., objname=''):
     return ned_table['Object Name'][0], ned_table['Separation'][0]
 
 
-def scrape_overview(soup):
+def scrape_overview(objname, verb=0):
 
+    # Get BeautifulSoup from URL
+    url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&\
+           omegav=%s#tab_3' % (objname, H_0, OMEGA_M, OMEGA_V)
+    if verb:
+        print('\tparsing html...')
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # mxpath labels in overview table
     main_mxpaths = dict(
         objname = 'NED_MainTable.main_col2',
         ra = 'NED_PositionDataTable.posn_col11',
@@ -176,6 +199,7 @@ def scrape_overview(soup):
         a_k = 'NED_BasicDataTable.qlsize_col27',
     )
 
+    # class labels of references
     ref_classes = dict(
         posn_ref = 'ov_inside_coord_row',
         z_ref = 'ov_inside_redshift_row',
@@ -185,20 +209,29 @@ def scrape_overview(soup):
 
     df = pd.DataFrame(columns=list(main_mxpaths.keys()))
 
-    try:
+    # Look for error messages
+    err_msg = soup.find_all('div', class_='messages error', 
+            text=re.compile('.*not found.*'))
+    if len(err_msg) == 0: # if no error messages appear
+        if verb:
+            print('\tscraping...')
         for key, mxpath in main_mxpaths.items():
-            val = soup.find('span', mxpath=mxpath).get_text()
-            df.loc[0, key] = val
-    except AttributeError:
-        pass
-
-    for key, class_ in ref_classes.items():
-        tr = soup.find('tr', class_=class_)
-        if tr:
-            a = tr.find('a')
-            if a:
-                ref = a.get_text()
+            try:
+                val = soup.find('span', mxpath=mxpath).get_text()
+                df.loc[0, key] = val
+            except AttributeError:
+                continue
+        for key, class_ in ref_classes.items():
+            try:
+                tr = soup.find('tr', class_=class_)
+                ref = tr.find('a').get_text()
                 df.loc[0, key] = ref
+            except AttributeError:
+                continue
+    else:
+        if verb:
+            print('Object name scrape failed for object: %s' % objname)
+        pass
 
     return df
 

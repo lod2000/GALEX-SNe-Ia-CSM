@@ -32,7 +32,7 @@ def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv')
     posn_info = fits_info.drop_duplicates('Name').set_index('Name')
-    sample = pd.Series(posn_info.index[:10])
+    sample = pd.Series(posn_info.index)
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     gen_tab = True
@@ -61,7 +61,7 @@ def get_sn(sn, fits_info, ref, verb=0):
     if verb:
         print('\n\n%s, host %s, RA %s, Dec %s' % (sn, host, ra, dec))
 
-    sn_info = pd.DataFrame()
+    sn_info = pd.DataFrame([''], columns=['objname'])
 
     # First, try query by host name; if redshift data exists, scrape NED
     if pd.notna(host):
@@ -69,11 +69,11 @@ def get_sn(sn, fits_info, ref, verb=0):
         if verb:
             print(host_query)
         if is_table(host_query) and not host_query['Redshift'].mask[0]:
-            ned_host = host_query['Object Name'][0]
+            ned_host = host_query['Object Name'][0].replace('+','%2B')
             sn_info = scrape_overview(ned_host, verb=verb)
 
     # Next, try a direct search by SN name
-    if len(sn_info) == 0:
+    if sn_info.loc[0,'objname'] == '':
         sn_query = query_name(sn, verb=verb)
         if verb:
             print(sn_query)
@@ -82,8 +82,9 @@ def get_sn(sn, fits_info, ref, verb=0):
 
     # Finally, try searching by location; if possible, use result with similar z
     # value to OSC
-    if len(sn_info) == 0:
+    if sn_info.loc[0,'objname'] == '':
         nearest, sep = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
+        nearest = nearest.replace('+', '%2B')
         sn_info = scrape_overview(nearest, verb=verb)
         sn_info.loc[0,'sep'] = sep
 

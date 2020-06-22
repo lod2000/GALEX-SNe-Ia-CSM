@@ -16,10 +16,13 @@ from astropy.coordinates import SkyCoord
 from astroquery.ned import Ned
 from astropy import units as u
 from pathlib import Path
+from time import sleep
 
 H_0 = 67.8 # km/sec/Mpc
 OMEGA_M = 0.308
 OMEGA_V = 0.692
+WMAP = 4
+CORR_Z = 1
 QUERY_RADIUS = 1. # arcmin
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
 NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
@@ -27,8 +30,9 @@ NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 
 def main():
 
-    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sample = pd.Series(fits_info.index.drop_duplicates()[:10])
+    fits_info = pd.read_csv('out/fitsinfo.csv')
+    posn_info = fits_info.drop_duplicates('Name').set_index('Name')
+    sample = pd.Series(posn_info.index[:10])
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     gen_tab = True
@@ -38,7 +42,7 @@ def main():
 
     if gen_tab:
         # Scrape NED for all SNe in sample
-        scraped = pd.concat([get_sn(sn, fits_info, ref) for sn in tqdm(sample)],
+        scraped = pd.concat([get_sn(sn, posn_info, ref, verb=0) for sn in tqdm(sample)],
                 ignore_index=True)
         scraped.set_index('name')
 
@@ -48,82 +52,39 @@ def main():
             scraped.to_csv(NED_RESULTS_FILE_TMP, index=False)
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
-    
-
-    '''
-    options = webdriver.FirefoxOptions()
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--incognito')
-    options.add_argument('--headless')
-    driver = webdriver.Firefox(executable_path='./geckodriver.exe', options=options)
-    driver.get(url)
-    action = ActionChains(driver)
-    redshifts_table = driver.find_elements_by_xpath('/html/body/div[1]/div[2]/section/form/div/div/div[2]/div/div[4]/fieldset[2]/ov_legend/span/div/span')[0]
-    redshifts_button = driver.find_element_by_xpath('/html/body/div[1]/div[2]/section/form/div/div/div[2]/div/div[4]/fieldset[2]/ov_legend/span/div/div[1]/div')
-    print(redshifts_button.text)
-    #driver.execute_script('arguments[0].click();', redshifts_table)
-    action.move_to_element(redshifts_button)
-    action.pause(1)
-    action.click(redshifts_button)
-    action.perform()
-    text_view = driver.find_elements_by_xpath('/html/body/div[1]/div[2]/section/form/div/div/div[2]/div/div[4]/fieldset[2]/ov_legend/span/div/div[2]/table/tbody/tr/td/div/div/div/div/div[1]/div[3]/div[2]')[0]
-    print(text_view)
-    time.sleep(0.1)
-    page_source = driver.page_source
-    soup = BeautifulSoup(page_source, 'lxml')
-
-    z = driver.find_elements_by_xpath('/html/body/div[1]/div[2]/section/form/div/div/div[2]/div/div[4]/fieldset[2]/ov_legend/span/div/div[2]/table/tbody/tr/td/div/div/div/div/div[2]/div/div[2]/div[1]/div[3]/div[2]/div/div[1]/div[2]/div/div[1]/div')
-    print(z)
-    z_tab_href = soup.find('a', text=re.compile('Redshifts \([0-9]+\)'))['href']
-
-    session = HTMLSession()
-    resp = session.get(url)
-    resp.html.render()
-
-    #soup = BeautifulSoup(resp.html.html, 'lxml')
-
-    # Redshift values from Redshifts tab
-    print(redshifts[0].text)
-    z_tab_href = soup.find('a', text=re.compile('Redshifts \([0-9]+\)'))['href']
-    driver.get(url+z_tab_href)
-    collapsible_tables = driver.find_elements_by_class_name('panel_collapsible_title')
-    for table in collapsible_tables:
-        driver.execute_script('arguments[0].click();', table)
-        time.sleep(0.1)
-    redshifts_tab_source = driver.page_source
-    redshifts_soup = BeautifulSoup(redshifts_tab_source, 'lxml')
-    z_tab = redshifts_soup.find('div', id=z_tab_href[1:])
-    measured_z_table = z_tab.find('div', {'class': 'panel_collapsible_title'})
-
-    #z_tab = soup.find('div', id=z_tab_href[1:])
-    #preferred_z = z_tab.find('span', mxpath='NED_BasicDataTable.basic_col4').get_text()
-    #measured_z_table = z_tab.find('div', {'class': 'panel_collapsible_title'})
-    #script = z_tab.find('script', {'type': 'text/javascript'})
-    #print(measured_z_table)
-
-    # Redshift-independent distances from Distances tab
-    dist_tab_href = soup.find('a', text=re.compile('Distances \([0-9]+\)'))['href']
-    dist_tab = soup.find('div', id=dist_tab_href[1:])
-    '''
 
 
-def get_sn(sn, fits_info, ref):
+def get_sn(sn, fits_info, ref, verb=0):
 
     host = ref.loc[sn, 'Host Name']
     ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
+    if verb:
+        print('\n\n%s, host %s, RA %s, Dec %s' % (sn, host, ra, dec))
 
-    # First, try searching by SN name
-    sn_info = scrape_overview(sn)
+    sn_info = pd.DataFrame()
 
-    # Next, try searching by host name
-    if len(sn_info) == 0 or sn_info.loc[0,'z'] == 'N/A':
-        sn_info = scrape_overview(host)
+    # First, try query by host name; if redshift data exists, scrape NED
+    if pd.notna(host):
+        host_query = query_name(host, verb=verb)
+        if verb:
+            print(host_query)
+        if is_table(host_query) and not host_query['Redshift'].mask[0]:
+            ned_host = host_query['Object Name'][0]
+            sn_info = scrape_overview(ned_host, verb=verb)
 
-    # Finally, try searching by location
-    if len(sn_info) == 0 or sn_info.loc[0,'z'] == 'N/A':
-        nearest, sep = query_loc(ra, dec, objname=sn)
-        #print(nearest)
-        sn_info = scrape_overview(nearest)
+    # Next, try a direct search by SN name
+    if len(sn_info) == 0:
+        sn_query = query_name(sn, verb=verb)
+        if verb:
+            print(sn_query)
+        if is_table(sn_query) and not sn_query['Redshift'].mask[0]:
+            sn_info = scrape_overview(sn, verb=verb)
+
+    # Finally, try searching by location; if possible, use result with similar z
+    # value to OSC
+    if len(sn_info) == 0:
+        nearest, sep = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
+        sn_info = scrape_overview(nearest, verb=verb)
         sn_info.loc[0,'sep'] = sep
 
     sn_info.loc[0,'name'] = sn
@@ -143,7 +104,7 @@ def query_name(objname, verb=0):
     """
 
     if verb:
-        print('\tsending query...')
+        print('\tsending query for %s...' % objname)
     try:
         results = Ned.query_object(objname)
         if verb:
@@ -156,19 +117,44 @@ def query_name(objname, verb=0):
     return results
 
 
-def query_loc(ra, dec, radius=1., objname=''):
+def query_loc(ra, dec, radius=1., z=None, verb=0):
+    """
+    Query NED based on sky coordninates
+    Inputs:
+        ra, dec (float): sky coords in HHhMMmSS.Ss str format
+        radius (float, optional): query radius in arcmin, default=1
+        verb (int or bool, optional): verbose output? Default: False
+    Outputs:
+        ned_table: astropy table of query results
+    """
 
     coord = SkyCoord(ra, dec)
     # Astroquery search by location
+    if verb:
+        print('\tsending query...')
     ned_results = Ned.query_region(coord, radius=radius*u.arcmin)
+    if verb:
+        print('\tcomplete')
     # Sort results by separation from target coords
     ned_sorted = ned_results[np.argsort(ned_results['Separation'])]
+    z_sorted = ned_sorted[ned_sorted['Redshift'].mask != True]
     # Choose closest result
-    ned_table = ned_sorted[0:1]
+    ned_table = ned_sorted[0]
+    # If provided a z, search for result with similar z value
+    if z:
+        for object in z_sorted:
+            if np.abs(object['Redshift'] - z) / z < 0.1:
+                ned_table = object
+                break
+    '''
     # If location search turns up the original object, check again
-    if ned_table['Object Name'][0] == objname and len(ned_sorted) > 1:
-        ned_table = ned_sorted[1:2]
-    return ned_table['Object Name'][0], ned_table['Separation'][0]
+    if ned_table['Object Name'] == objname and len(ned_sorted) > 1:
+        ned_table = ned_sorted[1]
+    '''
+    sleep(1)
+    if verb:
+        print(ned_table)
+    return ned_table['Object Name'], ned_table['Separation']
 
 
 def scrape_overview(objname, verb=0):
@@ -182,10 +168,9 @@ def scrape_overview(objname, verb=0):
     """
 
     # Get BeautifulSoup from URL
-    url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&\
-           omegav=%s#tab_3' % (objname, H_0, OMEGA_M, OMEGA_V)
+    url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&omegav=%s&wmap=%s&corr_z=%s' % (objname, H_0, OMEGA_M, OMEGA_V, WMAP, CORR_Z)
     if verb:
-        print('\tparsing html...')
+        print('\tscraping %s ...' % url)
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -218,17 +203,14 @@ def scrape_overview(objname, verb=0):
     object_info = pd.DataFrame(columns=list(main_mxpaths.keys()))
 
     # Look for error messages
-    err_msg = soup.find_all('div', class_='messages error', 
-            text=re.compile('.*not found.*'))
+    err_msg = soup.find_all('div', class_='messages error')
     if len(err_msg) == 0: # if no error messages appear
-        if verb:
-            print('\tscraping...')
         for key, mxpath in main_mxpaths.items():
             try:
                 val = soup.find('span', mxpath=mxpath).get_text()
                 object_info.loc[0, key] = val
-            except AttributeError:
-                continue
+            except AttributeError as e:
+                raise e
         for key, class_ in ref_classes.items():
             try:
                 tr = soup.find('tr', class_=class_)
@@ -242,6 +224,14 @@ def scrape_overview(objname, verb=0):
         pass
 
     return object_info
+
+
+def is_table(ned_table):
+    """
+    Returns whether the input NED table is real (at least one row) or not
+    (None or 0 rows)
+    """
+    return (ned_table is not None and len(ned_table) > 0)
 
 
 if __name__ == '__main__':

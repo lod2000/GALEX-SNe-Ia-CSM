@@ -44,7 +44,7 @@ def main():
     # Continue from previous output
     elif prev == 'c':
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
-        sne = np.array([row.name for row in fits_no_dup if row.name not in ned.index])
+        sne = np.array([row.name for i, row in fits_no_dup.iterrows() if row.name not in ned.index])
     # Keep previous output
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')

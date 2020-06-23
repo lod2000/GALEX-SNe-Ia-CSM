@@ -13,9 +13,10 @@ from astroquery.ned import Ned
 from astropy import units as u
 from pathlib import Path
 from time import sleep
+import matplotlib.pyplot as plt
 
-C = 3.e5
-H_0 = 70. # km/sec/Mpc
+C = 3.e5 # km/s
+H_0 = 70. # km/s/Mpc
 OMEGA_M = 0.3
 OMEGA_V = 0.7
 WMAP = 4
@@ -58,6 +59,8 @@ def main():
             ned.to_csv(NED_RESULTS_FILE)
         except PermissionError:
             ned.to_csv(NED_RESULTS_FILE_TMP)
+
+    plot_redshifts(ned)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -246,6 +249,20 @@ def physical_offset(ra1, dec1, ra2, dec2, z):
 
 def hubble_distance(z):
     return C * float(z) / H_0 # Mpc
+
+
+def plot_redshifts(ned, bin_width=0.025):
+    z = ned['z']
+    z = z[pd.notna(z)]
+    bins = int((max(z) - min(z)) / bin_width)
+    plt.hist(z, bins=bins, histtype='step')
+    plt.xlabel('z')
+    plt.xlim((0, max(z)))
+    plt.ylabel('# of SNe')
+    plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
+    plt.xlim((0,0.5))
+    plt.savefig(Path('out/redshifts_clipped.png'), bbox_inches='tight', dpi=300)
+    plt.close()
 
 
 if __name__ == '__main__':

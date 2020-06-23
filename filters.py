@@ -26,12 +26,12 @@ for i, f in enumerate(filters):
     if inst == 'Swift UVOT':
         y = y/(np.pi * 15**2) # objective diameter: 30 cm
 
-    ax.plot(freq, y, label=' '.join([inst, name]), linestyle=styles[i], 
+    ax.plot(freq, y*100, label=' '.join([inst, name]), linestyle=styles[i], 
             alpha=alphas[i], color=colors[i])
 
-ax.set_xlabel('Wavelength (Å)')
+ax.set_xlabel('Wavelength [Å]')
 ax.set_xlim((1000, 3500))
-ax.set_ylabel('Transmission')
+ax.set_ylabel('Transmission [%]')
 ax.legend()
 
 plt.savefig(Path('../figs/filters.png'), bbox_inches='tight', dpi=300)

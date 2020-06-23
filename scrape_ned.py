@@ -3,27 +3,29 @@
 import numpy as np
 import pandas as pd
 import requests
-import urllib.request
+#import urllib.request
 import time
 from bs4 import BeautifulSoup
 import re
-from selenium import webdriver
-from selenium.webdriver import ActionChains
-from requests_html import HTMLSession
-import pyppdf.patch_pyppeteer
+#from selenium import webdriver
+#from selenium.webdriver import ActionChains
+#from requests_html import HTMLSession
+#import pyppdf.patch_pyppeteer
 from tqdm import tqdm
 from astropy.coordinates import SkyCoord
+from astropy.coordinates import Angle
 from astroquery.ned import Ned
 from astropy import units as u
 from pathlib import Path
 from time import sleep
 
-H_0 = 67.8 # km/sec/Mpc
-OMEGA_M = 0.308
-OMEGA_V = 0.692
+C = 3.e5
+H_0 = 70. # km/sec/Mpc
+OMEGA_M = 0.3
+OMEGA_V = 0.7
 WMAP = 4
 CORR_Z = 1
-QUERY_RADIUS = 1. # arcmin
+QUERY_RADIUS = 5. # arcmin
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
 NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 
@@ -32,7 +34,7 @@ def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv')
     posn_info = fits_info.drop_duplicates('Name').set_index('Name')
-    sample = pd.Series(posn_info.index)[:10]
+    sample = pd.Series(posn_info.index)[92:93]
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     gen_tab = True
@@ -74,6 +76,7 @@ def get_sn(sn, fits_info, ref, verb=0):
 
     sn_info = pd.DataFrame([''], columns=['objname'])
 
+    """
     # First, try query by host name; if redshift data exists, scrape NED
     if pd.notna(host):
         host_query = query_name(host, verb=verb)
@@ -91,17 +94,23 @@ def get_sn(sn, fits_info, ref, verb=0):
         if is_table(sn_query) and not sn_query['Redshift'].mask[0]:
             sn_name = sn_query['Object Name'][0]
             sn_info = scrape_overview(sn, verb=verb)
+    """
 
     # Finally, try searching by location; if possible, use result with similar z
     # value to OSC
-    if sn_info.loc[0,'objname'] == '' or pd.isna(sn_info.loc[0,'z']):
-        nearest_query = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
-        nearest_name = nearest_query['Object Name'].replace('+', '%2B')
-        sn_info = scrape_overview(nearest_name, verb=verb)
-        sn_info.loc[0,'sep'] = nearest_query['Separation']
+    #if sn_info.loc[0,'objname'] == '' or pd.isna(sn_info.loc[0,'z']):
+    nearest_query = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
+    nearest_name = nearest_query['Object Name'].replace('+', '%2B')
+    sn_info = scrape_overview(nearest_name, verb=verb)
+    sn_info.loc[0,'sep'] = nearest_query['Separation']
+    if pd.notna(sn_info.loc[0,'ra']):
+        sn_info.loc[0,'offset'] = physical_offset(ra, dec, sn_info.loc[0,'ra'], 
+                sn_info.loc[0,'dec'], sn_info.loc[0,'z']) # kpc
 
     sn_info.loc[0,'name'] = sn
     sn_info.loc[0,'host'] = host
+    sn_info.loc[0,'galex_ra'] = ra
+    sn_info.loc[0,'galex_dec'] = dec
 
     return sn_info
 
@@ -132,7 +141,7 @@ def query_name(objname, verb=0):
 
 def query_loc(ra, dec, radius=1., z=None, verb=0):
     """
-    Query NED based on sky coordninates
+    Query NED based on sky coordninates; return closest match with similar z
     Inputs:
         ra, dec (float): sky coords in HHhMMmSS.Ss str format
         radius (float, optional): query radius in arcmin, default=1
@@ -242,6 +251,18 @@ def is_table(ned_table):
     (None or 0 rows)
     """
     return (ned_table is not None and len(ned_table) > 0)
+
+
+def physical_offset(ra1, dec1, ra2, dec2, z):
+
+    ra1, dec1, ra2, dec2 = Angle(ra1), Angle(dec1), Angle(ra2), Angle(dec2)
+    diff = Angle(np.sqrt((ra1-ra2)**2 + (dec1-dec2)**2), u.rad)
+    offset = hubble_distance(z) * diff.value * 1000 # kpc
+    return offset
+
+
+def hubble_distance(z):
+    return C * float(z) / H_0 # Mpc
 
 
 if __name__ == '__main__':

@@ -30,30 +30,30 @@ NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv')
-    posn_info = fits_info.drop_duplicates('Name').set_index('Name')
-    sne = pd.Series(posn_info.index)
+    fits_no_dup = fits_info.drop_duplicates('Name').set_index('Name')
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     prev = 'o'
     if NED_RESULTS_FILE.is_file():
-        prev = input('Previous NED query results found. [K]eep/[c]ontinue/[o]verwrite?')
+        prev = input('Previous NED query results found. [K]eep/[c]ontinue/[o]verwrite? ')
 
     # Overwrite completely
     if prev == 'o':
         ned = pd.DataFrame()
-        blocks = np.arange(0, len(sne), BLOCK_SIZE)
+        sne = np.array(fits_no_dup.index)
     # Continue from previous output
     elif prev == 'c':
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
-        blocks = np.arange(len(ned), len(sne), BLOCK_SIZE)
+        sne = np.array([row.name for row in fits_no_dup if row.name not in ned.index])
     # Keep previous output
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
-        blocks = np.array([])
+        sne = np.array([])
 
+    blocks = np.arange(0, len(sne), BLOCK_SIZE)
     for b in tqdm(blocks):
         sample = sne[b:b+BLOCK_SIZE]
-        block = pd.concat([get_sn(sn, posn_info, ref, verb=0) for sn in sample])
+        block = pd.concat([get_sn(sn, fits_no_dup, ref, verb=0) for sn in sample])
         ned = pd.concat([ned, block])
         try:
             ned.to_csv(NED_RESULTS_FILE)

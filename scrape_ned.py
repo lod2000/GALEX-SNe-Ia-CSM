@@ -36,7 +36,7 @@ def main():
 
     prev = 'o'
     if NED_RESULTS_FILE.is_file():
-        prev = input('Previous NED query results found. [o]verwrite/[c]ontinue/[K]eep?')
+        prev = input('Previous NED query results found. [K]eep/[c]ontinue/[o]verwrite?')
 
     # Overwrite completely
     if prev == 'o':

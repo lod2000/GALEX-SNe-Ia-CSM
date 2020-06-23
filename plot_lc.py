@@ -6,11 +6,12 @@ from astropy.time import Time
 import matplotlib.markers as mmarkers
 import matplotlib.colors as mcolors
 import utils
+from scipy import stats
 
 
 def main():
 
-    fits_name = 'SN2007ql-NUV.fits.gz'
+    fits_name = 'SN2007on-NUV.fits.gz'
 
     fits_dir = Path('/mnt/d/GALEXdata_v5/fits/')
     fits_file = fits_dir / Path(fits_name)
@@ -39,14 +40,19 @@ def get_median(lc, disc_date):
     after = lc[lc['t_mean'] > (disc_date + 500).gps]
     if len(before) > 0:
         med = np.nanmedian(before['mag_plot'])
+        print(med)
         med_err = np.nanstd(before['mag_plot'])
+        wgt_mean = np.average(before['mag_plot'], weights=before['mag_plot_err_1'])
+        print(wgt_mean)
+        chisquare, p = stats.chisquare(before['mag_plot'], med, ddof=len(before)-1)
+        print(chisquare / med)
     elif len(after) > 0:
         med = np.nanmedian(after['mag_plot'])
         med_err = np.nanstd(after['mag_plot'])
     else:
         med = lc.loc[0,'mag_plot']
-        med_err = np.nanmax([lc.loc[0, 'mag_plot_err_lower'], 
-                lc.loc[0, 'mag_plot_err_upper']])
+        med_err = np.nanmax([lc.loc[0, 'mag_plot_err_2'], 
+                lc.loc[0, 'mag_plot_err_1']])
 
     return med, med_err
 
@@ -57,15 +63,15 @@ def get_lc_data(lc, band):
     # MCAT magnitudes and errors
     lc['mcat'] = pd.notna(lc['mag_mcatbgsub'])
     lc.loc[lc['mcat'], 'mag_plot'] = lc.loc[lc['mcat'], 'mag_mcatbgsub']
-    lc.loc[lc['mcat'], 'mag_plot_err_lower'] = lc.loc[lc['mcat'], 'mag_mcatbgsub_err_2']
-    lc.loc[lc['mcat'], 'mag_plot_err_upper'] = lc.loc[lc['mcat'], 'mag_mcatbgsub_err_1']
+    lc.loc[lc['mcat'], 'mag_plot_err_2'] = lc.loc[lc['mcat'], 'mag_mcatbgsub_err_2']
+    lc.loc[lc['mcat'], 'mag_plot_err_1'] = lc.loc[lc['mcat'], 'mag_mcatbgsub_err_1']
     lc.loc[lc['mcat'], 'type'] = 'mcat'
     # Non-MCAT magnitudes and errors
     lc.loc[~lc['mcat'], 'mag_plot'] = lc.loc[~lc['mcat'], 'mag_bgsub']
-    lc.loc[~lc['mcat'], 'mag_plot_err_lower'] = lc.loc[~lc['mcat'], 'mag_bgsub_err_2']
-    lc.loc[(pd.isna(lc['mag_bgsub_err_2'])) & (~lc['mcat']), 'mag_plot_err_lower'] = \
-            lc.loc[(pd.isna(lc['mag_bgsub_err_2'])) & (~lc['mcat']), 'mag_bgsub_err_1']
-    lc.loc[~lc['mcat'], 'mag_plot_err_upper'] = lc.loc[~lc['mcat'], 'mag_bgsub_err_1']
+    lc.loc[~lc['mcat'], 'mag_plot_err_2'] = lc.loc[~lc['mcat'], 'mag_bgsub_err_2']
+    # fill missing lower error values
+    lc.loc[(pd.isna(lc['mag_bgsub_err_2'])) & (~lc['mcat']), 'mag_plot_err_2'] = 0
+    lc.loc[~lc['mcat'], 'mag_plot_err_1'] = lc.loc[~lc['mcat'], 'mag_bgsub_err_1']
     lc.loc[(~lc['mcat']) & (pd.notna(lc['mag_bgsub'])), 'type'] = 'normal'
     # Upper bounds for missing mags
     lc.loc[pd.isna(lc['mag_plot']), 'mag_plot'] = utils.galex_ab_mag(
@@ -95,7 +101,7 @@ def plot_lc(lc, disc_date, med, med_err, fits_name):
     # Magnitudes without MCAT errors
     normal = lc[lc['type'] == 'normal']
     markers, caps, bars = ax.errorbar(normal['t_mean_mjd'], normal['mag_plot'], 
-            yerr=[normal['mag_plot_err_lower'], normal['mag_plot_err_upper']], 
+            yerr=[normal['mag_plot_err_1'], normal['mag_plot_err_2']], 
             marker='o', linestyle='none', ms=4, elinewidth=1, c='blue',
             label='Background-sub magnitudes'
     )
@@ -104,7 +110,7 @@ def plot_lc(lc, disc_date, med, med_err, fits_name):
     # Magnitudes with MCAT errors
     mcat = lc[lc['type'] == 'mcat']
     markers, caps, bars = ax.errorbar(mcat['t_mean_mjd'], mcat['mag_plot'], 
-            yerr=[mcat['mag_plot_err_lower'], mcat['mag_plot_err_upper']], 
+            yerr=[mcat['mag_plot_err_1'], mcat['mag_plot_err_2']], 
             marker='D', linestyle='none', ms=6, elinewidth=1, c='orange',
             label='MCAT background-sub magnitude'
     )

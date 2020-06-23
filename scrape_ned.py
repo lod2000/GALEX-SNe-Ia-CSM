@@ -52,7 +52,7 @@ def main():
 
     blocks = np.arange(0, len(sne), BLOCK_SIZE)
     for b in tqdm(blocks):
-        sample = sne[b:b+BLOCK_SIZE]
+        sample = sne[b:min(b+BLOCK_SIZE, len(sne))]
         block = pd.concat([get_sn(sn, fits_no_dup, ref, verb=0) for sn in sample])
         ned = pd.concat([ned, block])
         try:
@@ -228,6 +228,7 @@ def scrape_overview(objname, verb=0):
             print('Object name scrape failed for object: %s' % objname)
         pass
 
+    sleep(1)
     return object_info
 
 

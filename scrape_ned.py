@@ -26,6 +26,7 @@ OMEGA_V = 0.7
 WMAP = 4
 CORR_Z = 1
 QUERY_RADIUS = 5. # arcmin
+BLOCK_SIZE = 10
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
 NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 
@@ -34,26 +35,34 @@ def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv')
     posn_info = fits_info.drop_duplicates('Name').set_index('Name')
-    sample = pd.Series(posn_info.index)[92:93]
+    sne = pd.Series(posn_info.index)
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
-    gen_tab = True
+    prev = 'o'
     if NED_RESULTS_FILE.is_file():
-        i = input('Previous NED query results found. Overwrite? [y/N] ')
-        gen_tab = True if i == 'y' else False
+        prev = input('Previous NED query results found. [o]verwrite/[c]ontinue/[K]eep?')
 
-    if gen_tab:
-        # Scrape NED for all SNe in sample
-        scraped = pd.concat([get_sn(sn, posn_info, ref, verb=0) for sn in tqdm(sample)],
-                ignore_index=True)
-        scraped.set_index('name')
-
-        try:
-            scraped.to_csv(NED_RESULTS_FILE, index=False)
-        except PermissionError:
-            scraped.to_csv(NED_RESULTS_FILE_TMP, index=False)
+    # Overwrite completely
+    if prev == 'o':
+        ned = pd.DataFrame()
+        blocks = np.arange(0, len(sne), BLOCK_SIZE)
+    # Continue from previous output
+    elif prev == 'c':
+        ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
+        blocks = np.arange(len(ned), len(sne), BLOCK_SIZE)
+    # Keep previous output
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
+        blocks = np.array([])
+
+    for b in tqdm(blocks):
+        sample = sne[b:b+BLOCK_SIZE]
+        block = pd.concat([get_sn(sn, posn_info, ref, verb=0) for sn in sample])
+        ned = pd.concat([ned, block])
+        try:
+            ned.to_csv(NED_RESULTS_FILE)
+        except PermissionError:
+            ned.to_csv(NED_RESULTS_FILE_TMP)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -112,7 +121,7 @@ def get_sn(sn, fits_info, ref, verb=0):
     sn_info.loc[0,'galex_ra'] = ra
     sn_info.loc[0,'galex_dec'] = dec
 
-    return sn_info
+    return sn_info.set_index('name')
 
 
 def query_name(objname, verb=0):

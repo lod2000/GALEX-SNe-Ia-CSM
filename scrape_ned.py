@@ -254,7 +254,7 @@ def hubble_distance(z):
 
 def plot_redshifts(ned, bin_width=0.025):
     z = ned['z']
-    z = z[pd.notna(z)]
+    z = z[pd.notna(z)].astype(float)
     bins = int((max(z) - min(z)) / bin_width)
     plt.hist(z, bins=bins, histtype='step')
     plt.xlabel('z')

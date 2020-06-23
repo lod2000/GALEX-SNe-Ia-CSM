@@ -78,7 +78,7 @@ def import_fits(fits_file, ref):
 
     return [sn.name, sn.disc_date.iso, f.band,
             f.ra.to_string(unit=u.hour), f.dec.to_string(unit=u.degree), 
-            f.epochs, pre, post, f.tmeans[0], f.tmeans[-1]]
+            f.epochs, pre, post, f.tmeans[0], f.tmeans[-1], f.filename]
 
 
 def compile_fits(fits_files, ref):
@@ -104,7 +104,7 @@ def compile_fits(fits_files, ref):
 
     fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Band',
             'R.A.', 'Dec.', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN', 
-            'First Epoch', 'Last Epoch'])
+            'First Epoch', 'Last Epoch', 'File'])
 
     return fits_info
 

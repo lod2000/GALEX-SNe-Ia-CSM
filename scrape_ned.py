@@ -3,14 +3,9 @@
 import numpy as np
 import pandas as pd
 import requests
-#import urllib.request
 import time
 from bs4 import BeautifulSoup
 import re
-#from selenium import webdriver
-#from selenium.webdriver import ActionChains
-#from requests_html import HTMLSession
-#import pyppdf.patch_pyppeteer
 from tqdm import tqdm
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import Angle
@@ -85,29 +80,8 @@ def get_sn(sn, fits_info, ref, verb=0):
 
     sn_info = pd.DataFrame([''], columns=['objname'])
 
-    """
-    # First, try query by host name; if redshift data exists, scrape NED
-    if pd.notna(host):
-        host_query = query_name(host, verb=verb)
-        if verb:
-            print(host_query)
-        if is_table(host_query) and not host_query['Redshift'].mask[0]:
-            ned_host = host_query['Object Name'][0].replace('+','%2B')
-            sn_info = scrape_overview(ned_host, verb=verb)
-
-    # Next, try a direct search by SN name
-    if sn_info.loc[0,'objname'] == '' or pd.isna(sn_info.loc[0,'z']):
-        sn_query = query_name(sn, verb=verb)
-        if verb:
-            print(sn_query)
-        if is_table(sn_query) and not sn_query['Redshift'].mask[0]:
-            sn_name = sn_query['Object Name'][0]
-            sn_info = scrape_overview(sn, verb=verb)
-    """
-
     # Finally, try searching by location; if possible, use result with similar z
     # value to OSC
-    #if sn_info.loc[0,'objname'] == '' or pd.isna(sn_info.loc[0,'z']):
     nearest_query = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
     nearest_name = nearest_query['Object Name'].replace('+', '%2B')
     sn_info = scrape_overview(nearest_name, verb=verb)

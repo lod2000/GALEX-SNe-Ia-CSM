@@ -266,5 +266,22 @@ def plot_redshifts(ned, bin_width=0.025):
     plt.close()
 
 
+def to_latex(ned):
+
+    # Cut SNe with z>=0.5
+    ned = ned[ned['z'] < 0.5]
+
+    # Get BibTeX entries and write bibfile
+    refs = list(ned['posn_ref']) + list(ned['z_ref']) + list(ned['morph_ref'])
+    bibcodes = {'bibcode':refs}
+    with open('ads_token', 'r') as file:
+        token = file.readline()
+    ads_bibtex_url = 'https://api.adsabs.harvard.edu/v1/export/bibtex'
+    r = requests.post(ads_bibtex_url, headers={'Authorization': 'Bearer ' + token}, data=bibcodes)
+    bibtex = r.json()['export']
+    with open('table_references.bib', 'w') as file:
+        file.write(bibtex)
+
+
 if __name__ == '__main__':
     main()

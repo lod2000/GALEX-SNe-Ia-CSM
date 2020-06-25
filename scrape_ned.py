@@ -34,6 +34,7 @@ def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv')
     fits_no_dup = fits_info.drop_duplicates('Name').set_index('Name')
+    fits_info.set_index('Name', inplace=True)
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     prev = 'o'
@@ -65,7 +66,7 @@ def main():
 
     #plot_redshifts(ned)
     #print(get_catalogs(ned))
-    to_latex(ned)
+    to_latex(ned, fits_info)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -260,6 +261,10 @@ def physical_offset(ra1, dec1, ra2, dec2, h_dist):
 
 
 def plot_redshifts(ned, bin_width=0.025):
+    """
+    Plots histogram of redshifts 
+    """
+
     z = ned['z']
     z = z[pd.notna(z)].astype(float)
     bins = int((max(z) - min(z)) / bin_width)
@@ -287,7 +292,10 @@ def get_catalogs(ned):
     return catalogs
 
 
-def to_latex(ned):
+def to_latex(ned, fits_info):
+    """
+    Outputs NED scrape output and important FITS info to LaTeX table
+    """
 
     print('Preparing NED results...')
     # Cut SNe with z>=0.5 or unknown
@@ -303,6 +311,9 @@ def to_latex(ned):
     # Sort by SN name
     ned.sort_index(inplace=True)
     ned.reset_index(inplace=True)
+    # Add epoch counts
+    # ned['epochs_total'] = np.sum(fits_info.loc[ned['name'], 'Total Epochs'])
+    # print(ned['epochs_total'])
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -324,23 +335,30 @@ def to_latex(ned):
             file.write(bibtex)
 
     print('Writing to LaTeX table...')
+    # Format reference bibcodes
     formatters = {'posn_ref':table_ref, 'z_ref':table_ref, 'morph_ref':table_ref}
-    latex_table = ned.to_latex(na_rep='N/A', index=False, #column_format='lcccl',
+    # Generate table with bare minimum data
+    latex_table = ned.to_latex(na_rep='N/A', index=False, escape=False,
         columns=['name', 'galex_coord', 'z_str', 'h_dist_str', 'z_ref'],
-        # header=['Target', 'Coordinates (J2000)', 'Redshift', 'Distance [Mpc]', 'Reference'],
-        formatters=formatters, escape=False, #longtable=True, caption='Caption', label='tab:Targets'
+        formatters=formatters
     )
+    # Replace table header and footer with template
+    # Edit this file if you need to change the number of columns or description
     with open(LATEX_TABLE_TEMPLATE, 'r') as file:
         dt_file = file.read()
         header = dt_file.split('===')[0]
         footer = dt_file.split('===')[1]
     latex_table = latex_table.split('\n')[4:-3]
     latex_table = header + '\n'.join(latex_table) + footer
+    # Write table
     with open(LATEX_TABLE_FILE, 'w') as file:
         file.write(latex_table)
 
 
 def table_ref(bibcode):
+    """
+    Formats reference bibcodes for LaTeX table
+    """
     return '\citet{%s}' % bibcode.replace('A&A', 'AandA')
 
 

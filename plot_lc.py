@@ -115,6 +115,12 @@ def plot_lc(lc, disc_date, med, med_err, fits_name):
     ax.scatter(upperlim['t_mean_mjd'], upperlim['mag_plot'], 
             marker='v', c='green', label='3σ detection limit')
 
+    # Fluxes
+    # lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
+    # markers, caps, bars = ax.errorbar(lc['t_delta'], lc['flux_bgsub'], 
+    #         yerr=lc['flux_bgsub_err'], marker='o', linestyle='none', ms=4, 
+    #         elinewidth=1, c='blue')
+
     # Magnitudes without MCAT errors
     normal = lc[lc['type'] == 'normal']
     markers, caps, bars = ax.errorbar(normal['t_mean_mjd'], normal['mag_plot'], 

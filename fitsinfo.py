@@ -143,9 +143,10 @@ def get_final_sample(fits_info):
         sample (DataFrame): stripped-down final sample
     """
 
-    post = get_post_obs(fits_info)
+    # post = get_post_obs(fits_info)
     both = get_pre_post_obs(fits_info)
-    return post.append(both).sort_values(by=['Name', 'Band']).reset_index(drop=True)
+    # return post.append(both).sort_values(by=['Name', 'Band']).reset_index(drop=True)
+    return both.sort_values(by=['Name', 'Band']).reset_index(drop=True)
 
 
 def print_quick_stats(fits_info, final_sample, ref):

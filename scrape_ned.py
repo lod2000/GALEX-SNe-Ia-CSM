@@ -25,8 +25,9 @@ QUERY_RADIUS = 5. # arcmin
 BLOCK_SIZE = 10
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
 NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
-BIB_FILE = Path('table_references.bib')
-LATEX_TABLE_FILE = Path('table.tex')
+BIB_FILE = Path('out/table_references.bib')
+LATEX_TABLE_TEMPLATE = Path('ref/deluxetable_template.tex')
+LATEX_TABLE_FILE = Path('out/table.tex')
 
 
 def main():
@@ -45,11 +46,11 @@ def main():
         sne = np.array(fits_no_dup.index)
     # Continue from previous output
     elif prev == 'c':
-        ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
+        ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
         sne = np.array([row.name for i, row in fits_no_dup.iterrows() if row.name not in ned.index])
     # Keep previous output
     else:
-        ned = pd.read_csv(NED_RESULTS_FILE, index_col='name')
+        ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
         sne = np.array([])
 
     blocks = np.arange(0, len(sne), BLOCK_SIZE)
@@ -295,8 +296,13 @@ def to_latex(ned):
     ned = ned[ned['offset'] < 100]
     # Flag SNe with physical sep > 30 kpc
     ned.loc[ned['offset'] > 30, 'z_flag'] = 'large host offset'
+    # Format coordinates, redshifts & distances
+    ned['galex_coord'] = ned[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
+    ned['z_str'] = ned['z'].round(6).astype('str').replace('0+$','',regex=True)
+    ned['h_dist_str'] = ned['h_dist'].round().astype('str').replace('.','')
     # Sort by SN name
     ned.sort_index(inplace=True)
+    ned.reset_index(inplace=True)
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -313,21 +319,29 @@ def to_latex(ned):
             token = file.readline()
         ads_bibtex_url = 'https://api.adsabs.harvard.edu/v1/export/bibtex'
         r = requests.post(ads_bibtex_url, headers={'Authorization': 'Bearer ' + token}, data=bibcodes)
-        bibtex = r.json()['export']
+        bibtex = r.json()['export'].replace('A&A', 'AandA') # replace pesky ampersands
         with open(BIB_FILE, 'w') as file:
             file.write(bibtex)
 
     print('Writing to LaTeX table...')
-    formatters = {'posn_ref':table_ref, 'z_ref':table_ref}
-    ned.to_latex(LATEX_TABLE_FILE, na_rep='N/A',
-        columns=['objname', 'ra', 'dec', 'posn_ref', 'z', 'z_err', 
-                'h_dist', 'h_dist_err', 'z_ref'],
-        formatters=formatters, longtable=True, label='tab:Ned', escape=False
+    formatters = {'posn_ref':table_ref, 'z_ref':table_ref, 'morph_ref':table_ref}
+    latex_table = ned.to_latex(na_rep='N/A', index=False, #column_format='lcccl',
+        columns=['name', 'galex_coord', 'z_str', 'h_dist_str', 'z_ref'],
+        # header=['Target', 'Coordinates (J2000)', 'Redshift', 'Distance [Mpc]', 'Reference'],
+        formatters=formatters, escape=False, #longtable=True, caption='Caption', label='tab:Targets'
     )
+    with open(LATEX_TABLE_TEMPLATE, 'r') as file:
+        dt_file = file.read()
+        header = dt_file.split('===')[0]
+        footer = dt_file.split('===')[1]
+    latex_table = latex_table.split('\n')[4:-3]
+    latex_table = header + '\n'.join(latex_table) + footer
+    with open(LATEX_TABLE_FILE, 'w') as file:
+        file.write(latex_table)
 
 
 def table_ref(bibcode):
-    return '\citet{%s}' % bibcode
+    return '\citet{%s}' % bibcode.replace('A&A', 'AandA')
 
 
 if __name__ == '__main__':

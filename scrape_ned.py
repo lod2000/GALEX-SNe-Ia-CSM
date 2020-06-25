@@ -25,6 +25,8 @@ QUERY_RADIUS = 5. # arcmin
 BLOCK_SIZE = 10
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
 NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
+BIB_FILE = Path('table_references.bib')
+LATEX_TABLE_FILE = Path('table.tex')
 
 
 def main():
@@ -60,7 +62,9 @@ def main():
         except PermissionError:
             ned.to_csv(NED_RESULTS_FILE_TMP)
 
-    plot_redshifts(ned)
+    #plot_redshifts(ned)
+    #print(get_catalogs(ned))
+    to_latex(ned)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -91,7 +95,7 @@ def get_sn(sn, fits_info, ref, verb=0):
     sn_info.loc[0,'sep'] = nearest_query['Separation']
     if pd.notna(sn_info.loc[0,'ra']):
         sn_info.loc[0,'offset'] = physical_offset(ra, dec, sn_info.loc[0,'ra'], 
-                sn_info.loc[0,'dec'], sn_info.loc[0,'z']) # kpc
+                sn_info.loc[0,'dec'], sn_info.loc[0,'h_dist']) # kpc
 
     sn_info.loc[0,'name'] = sn
     sn_info.loc[0,'host'] = host
@@ -240,16 +244,18 @@ def is_table(ned_table):
     return (ned_table is not None and len(ned_table) > 0)
 
 
-def physical_offset(ra1, dec1, ra2, dec2, z):
+def physical_offset(ra1, dec1, ra2, dec2, h_dist):
+    """
+    Calculates physical offset, in kpc, between SN and host galaxy center
+    Inputs:
+        ra1, ra2, dec1, dec2 (str): coordinates of two objects in HHhMMmSS.Ss str format
+        h_dist: Hubble distance from NED in Mpc
+    """
 
     ra1, dec1, ra2, dec2 = Angle(ra1), Angle(dec1), Angle(ra2), Angle(dec2)
     diff = Angle(np.sqrt((ra1-ra2)**2 + (dec1-dec2)**2), u.rad)
-    offset = hubble_distance(z) * diff.value * 1000 # kpc
+    offset = h_dist * diff.value * 1000 # kpc
     return offset
-
-
-def hubble_distance(z):
-    return C * float(z) / H_0 # Mpc
 
 
 def plot_redshifts(ned, bin_width=0.025):
@@ -266,21 +272,62 @@ def plot_redshifts(ned, bin_width=0.025):
     plt.close()
 
 
+def get_catalogs(ned):
+    """
+    Get catalog refcodes (denoted by trailing ':' in NED)
+    """
+
+    ned.dropna(subset=['z'], inplace=True)
+    ref_cols = ['posn_ref', 'z_ref', 'morp_ref']
+    catalogs = []
+    for col in ref_cols:
+        catalogs += list(ned[ned['posn_ref'].str.contains(':')]['posn_ref'])
+    catalogs = list(dict.fromkeys(catalogs))
+    return catalogs
+
+
 def to_latex(ned):
 
-    # Cut SNe with z>=0.5
+    print('Preparing NED results...')
+    # Cut SNe with z>=0.5 or unknown
     ned = ned[ned['z'] < 0.5]
+    # Cut SNe with physical sep > 100 kpc
+    ned = ned[ned['offset'] < 100]
+    # Flag SNe with physical sep > 30 kpc
+    ned.loc[ned['offset'] > 30, 'z_flag'] = 'large host offset'
+    # Sort by SN name
+    ned.sort_index(inplace=True)
 
     # Get BibTeX entries and write bibfile
-    refs = list(ned['posn_ref']) + list(ned['z_ref']) + list(ned['morph_ref'])
-    bibcodes = {'bibcode':refs}
-    with open('ads_token', 'r') as file:
-        token = file.readline()
-    ads_bibtex_url = 'https://api.adsabs.harvard.edu/v1/export/bibtex'
-    r = requests.post(ads_bibtex_url, headers={'Authorization': 'Bearer ' + token}, data=bibcodes)
-    bibtex = r.json()['export']
-    with open('table_references.bib', 'w') as file:
-        file.write(bibtex)
+    overwrite = True
+    if BIB_FILE.is_file():
+        over_in = input('Previous bibliography detected. Overwrite? [y/N] ')
+        overwrite = (over_in == 'y')
+
+    if overwrite:
+        print('Pulling BibTeX entries from ADS...')
+        refs = list(ned['posn_ref']) + list(ned['z_ref']) + list(ned['morph_ref'])
+        refs = list(dict.fromkeys(refs)) # remove duplicates
+        bibcodes = {'bibcode':refs}
+        with open('ads_token', 'r') as file:
+            token = file.readline()
+        ads_bibtex_url = 'https://api.adsabs.harvard.edu/v1/export/bibtex'
+        r = requests.post(ads_bibtex_url, headers={'Authorization': 'Bearer ' + token}, data=bibcodes)
+        bibtex = r.json()['export']
+        with open(BIB_FILE, 'w') as file:
+            file.write(bibtex)
+
+    print('Writing to LaTeX table...')
+    formatters = {'posn_ref':table_ref, 'z_ref':table_ref}
+    ned.to_latex(LATEX_TABLE_FILE, na_rep='N/A',
+        columns=['objname', 'ra', 'dec', 'posn_ref', 'z', 'z_err', 
+                'h_dist', 'h_dist_err', 'z_ref'],
+        formatters=formatters, longtable=True, label='tab:Ned', escape=False
+    )
+
+
+def table_ref(bibcode):
+    return '\citet{%s}' % bibcode
 
 
 if __name__ == '__main__':

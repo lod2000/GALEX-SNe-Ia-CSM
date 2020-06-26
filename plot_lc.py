@@ -25,9 +25,11 @@ def main():
     lc_nuv = get_lc_data(sn, 'NUV', disc_date, ned)
     lc_fuv = get_lc_data(sn, 'FUV', disc_date, ned)
 
-    # bg, bg_err = get_median(lc, disc_date)
+    bg, bg_err, err_step = get_background(lc_nuv, disc_date)
+    print(err_step)
+    lc_fuv['luminosity_err'] = np.sqrt(lc_nuv['luminosity_err'] ** 2 + err_step ** 2)
 
-    plot_lc(lc_nuv, lc_fuv, sn, disc_date)
+    plot_lc(lc_nuv, lc_fuv, sn, disc_date, bg, bg_err)
 
     # floor = med - 2 * med_err
     # flag = lc[(lc['mag_mcatbgsub'] < floor) | (lc['mag_bgsub'] < floor)]
@@ -36,17 +38,25 @@ def main():
 
 def get_background(lc, disc_date):
 
-    before = lc[lc['t_delta'] < 0]
+    before = lc[lc['t_delta'] < -50]
+    data = np.array(before['luminosity'])
+    err = np.array(before['luminosity_err'])
     if len(before) > 1:
-        bg = np.average(before['luminosity'], weights=before['luminosity_err'])
-        bg_err = np.std(before['luminosity'])
-        chisquare, p = stats.chisquare(before['luminosity'], bg, ddof=len(before)-1)
-        print(chisquare / bg)
+        bg = np.average(data, weights=err)
+        bg_err = np.sqrt(np.sum(err ** 2))
+        rcs = utils.redchisquare(data, np.full(data.size, bg), err, n=0)
+        err_step = err[0] * 0.1
+        while rcs > 1:
+            err_step += err[0] * 0.1
+            new_err = np.sqrt(err ** 2 + err_step ** 2)
+            rcs = utils.redchisquare(data, np.full(data.size, bg), new_err, n=0)
+        bg = np.average(data, weights=new_err)
+        bg_err = np.sqrt(np.sum(new_err ** 2))
     else:
         bg = lc.loc[0, 'luminosity']
         bg_err = lc.loc[0, 'luminosity_err']
 
-    return bg, bg_err
+    return bg, bg_err, err_step
 
 
 def get_lc_data(sn, band, disc_date, ned):
@@ -73,15 +83,16 @@ def get_lc_data(sn, band, disc_date, ned):
     return lc
 
 
-def plot_lc(lc_nuv, lc_fuv, sn, disc_date):
+def plot_lc(lc_nuv, lc_fuv, sn, disc_date, bg, bg_err):
 
     fig, ax = plt.subplots()
 
+    xlim = (-1000, 1000)
+
     # Background median of epochs before or long after discovery
-    # ax.hlines(med, lc['t_mean_mjd'][0], lc.iloc[-1]['t_mean_mjd'], colors=['grey'], 
-    #         label='Background median')
-    # ax.fill_between(lc['t_mean_mjd'], med - med_err, med + med_err, 
-    #         alpha=0.5, color='grey', label='Background 1σ')
+    ax.hlines(bg, xlim[0], xlim[1], colors=['grey'], label='Background median')
+    ax.fill_between(np.arange(xlim[0], xlim[1]), bg - bg_err, bg + bg_err, 
+            alpha=0.5, color='grey', label='Background 1σ')
     # ax.fill_between(lc['t_mean_mjd'], med - 2 * med_err, med + 2 * med_err, 
     #         alpha=0.2, color='grey', label='Background 2σ')
 
@@ -107,10 +118,8 @@ def plot_lc(lc_nuv, lc_fuv, sn, disc_date):
     # Configure plot
     # plt.gca().invert_yaxis()
     ax.set_xlabel('Time since discovery [days]')
-    ax.set_xlim((-50, 1000))
+    ax.set_xlim(xlim)
     ax.set_ylabel('Luminosity [erg s^-1 Å^-1]')
-    # ax.set_yscale('log')
-    # ax.set_xlim((lc['t_mean_mjd'][0] - 50, lc.iloc[-1]['t_mean_mjd'] + 50))
     plt.legend()
     fig.suptitle(sn)
     plt.show()

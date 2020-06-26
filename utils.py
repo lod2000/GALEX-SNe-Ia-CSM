@@ -62,6 +62,11 @@ def sn2fits(sn, band=None):
         return fits_name + '-FUV.fits.gz', fits_name + '-NUV.fits.gz'
 
 
+def redchisquare(data, model, sd, n=0):
+    chisq = np.sum(((data-model)/sd)**2)
+    return chisq/(len(data)-1-n)
+
+
 class SN:
     def __init__(self, fits_file, ref):
         name = fits2sn(fits_file, ref)

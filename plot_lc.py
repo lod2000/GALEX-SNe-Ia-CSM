@@ -22,14 +22,15 @@ def main():
 
     disc_date = Time(ref.loc[sn, 'Disc. Date'], format='iso')
 
-    lc_nuv = get_lc_data(sn, 'NUV', disc_date, ned)
-    lc_fuv = get_lc_data(sn, 'FUV', disc_date, ned)
+    nuv_lc = get_lc_data(sn, 'NUV', disc_date, ned)
+    fuv_lc = get_lc_data(sn, 'FUV', disc_date, ned)
 
-    bg, bg_err, err_step = get_background(lc_nuv, disc_date)
-    print(err_step)
-    lc_fuv['luminosity_err'] = np.sqrt(lc_nuv['luminosity_err'] ** 2 + err_step ** 2)
+    nuv_bg, nuv_bg_err, nuv_sys_err = get_background(nuv_lc, disc_date)
+    nuv_lc['luminosity_err'] = np.sqrt(nuv_lc['luminosity_err'] ** 2 + nuv_sys_err ** 2)
+    fuv_bg, fuv_bg_err, fuv_sys_err = get_background(fuv_lc, disc_date)
+    fuv_lc['luminosity_err'] = np.sqrt(fuv_lc['luminosity_err'] ** 2 + fuv_sys_err ** 2)
 
-    plot_lc(lc_nuv, lc_fuv, sn, disc_date, bg, bg_err)
+    plot_lc(nuv_lc, fuv_lc, sn, disc_date, nuv_bg, nuv_bg_err, fuv_bg, fuv_bg_err)
 
     # floor = med - 2 * med_err
     # flag = lc[(lc['mag_mcatbgsub'] < floor) | (lc['mag_bgsub'] < floor)]
@@ -42,21 +43,25 @@ def get_background(lc, disc_date):
     data = np.array(before['luminosity'])
     err = np.array(before['luminosity_err'])
     if len(before) > 1:
+        # Determine background from weighted average of data before discovery
         bg = np.average(data, weights=err)
-        bg_err = np.sqrt(np.sum(err ** 2))
+        bg_err = np.std(data)
+        # bg_err = np.sqrt(np.sum(err ** 2))
+        # Reduced chi squared test of data vs background
         rcs = utils.redchisquare(data, np.full(data.size, bg), err, n=0)
-        err_step = err[0] * 0.1
+        sys_err = err[0] * 0.1
+        # Reduce RCS to 1 by adding systematic error in quadrature
         while rcs > 1:
-            err_step += err[0] * 0.1
-            new_err = np.sqrt(err ** 2 + err_step ** 2)
+            sys_err += err[0] * 0.1
+            new_err = np.sqrt(err ** 2 + sys_err ** 2)
             rcs = utils.redchisquare(data, np.full(data.size, bg), new_err, n=0)
-        bg = np.average(data, weights=new_err)
-        bg_err = np.sqrt(np.sum(new_err ** 2))
+            bg = np.average(data, weights=new_err)
+            # bg_err = np.sqrt(np.sum(new_err ** 2))
     else:
         bg = lc.loc[0, 'luminosity']
         bg_err = lc.loc[0, 'luminosity_err']
 
-    return bg, bg_err, err_step
+    return bg, bg_err, sys_err
 
 
 def get_lc_data(sn, band, disc_date, ned):
@@ -83,16 +88,24 @@ def get_lc_data(sn, band, disc_date, ned):
     return lc
 
 
-def plot_lc(lc_nuv, lc_fuv, sn, disc_date, bg, bg_err):
+def plot_lc(nuv_lc, fuv_lc, sn, disc_date, nuv_bg, nuv_bg_err, fuv_bg, fuv_bg_err):
+
+    # Convert negative luminosities into upper limits
+    nuv_lims = nuv_lc[nuv_lc['luminosity'] < 0]
+    fuv_lims = fuv_lc[fuv_lc['luminosity'] < 0]
+    nuv_lc = nuv_lc[nuv_lc['luminosity'] > 0]
+    fuv_lc = fuv_lc[fuv_lc['luminosity'] > 0]
 
     fig, ax = plt.subplots()
 
-    xlim = (-1000, 1000)
+    xlim = (-50, 1000)
 
     # Background median of epochs before or long after discovery
-    ax.hlines(bg, xlim[0], xlim[1], colors=['grey'], label='Background median')
-    ax.fill_between(np.arange(xlim[0], xlim[1]), bg - bg_err, bg + bg_err, 
-            alpha=0.5, color='grey', label='Background 1σ')
+    # ax.hlines(bg, xlim[0], xlim[1], colors=['grey'], label='Background median')
+    ax.fill_between(np.arange(xlim[0], xlim[1]), 0, 2 * nuv_bg_err, 
+            alpha=0.5, color='blue', label='NUV host background 2σ')
+    ax.fill_between(np.arange(xlim[0], xlim[1]), 0, 2 * fuv_bg_err, 
+            alpha=0.5, color='purple', label='FUV host background 2σ')
     # ax.fill_between(lc['t_mean_mjd'], med - 2 * med_err, med + 2 * med_err, 
     #         alpha=0.2, color='grey', label='Background 2σ')
 
@@ -102,24 +115,32 @@ def plot_lc(lc_nuv, lc_fuv, sn, disc_date, bg, bg_err):
     #         marker='v', c='green', label='3σ detection limit')
 
     # NUV fluxes
-    markers, caps, bars = ax.errorbar(lc_nuv['t_delta'], lc_nuv['luminosity'], 
-            yerr=lc_nuv['luminosity_err'], linestyle='none', marker='o', ms=4,
-            elinewidth=1, c='blue', label='NUV background-corrected flux'
+    markers, caps, bars = ax.errorbar(nuv_lc['t_delta'], nuv_lc['luminosity'] - nuv_bg, 
+            yerr=nuv_lc['luminosity_err'], linestyle='none', marker='o', ms=4,
+            elinewidth=1, c='blue', label='NUV'
     )
     [bar.set_alpha(0.8) for bar in bars]
 
+    # NUV upper limits
+    ax.scatter(nuv_lims['t_delta'], 3 * nuv_lims['luminosity_err'] - nuv_bg, 
+            marker='v', color='blue', label='NUV 3σ limit')
+
     # FUV fluxes
-    markers, caps, bars = ax.errorbar(lc_fuv['t_delta'], lc_fuv['luminosity'], 
-            yerr=lc_fuv['luminosity_err'], linestyle='none', marker='D', ms=4,
-            elinewidth=1, c='purple', label='FUV background-corrected flux'
+    markers, caps, bars = ax.errorbar(fuv_lc['t_delta'], fuv_lc['luminosity'] - fuv_bg, 
+            yerr=fuv_lc['luminosity_err'], linestyle='none', marker='D', ms=4,
+            elinewidth=1, c='purple', label='FUV'
     )
     [bar.set_alpha(0.8) for bar in bars]
+
+    # FUV upper limits
+    ax.scatter(fuv_lims['t_delta'], 3 * fuv_lims['luminosity_err'] - fuv_bg, 
+            marker='v', color='purple', label='FUV 3σ limit')
 
     # Configure plot
     # plt.gca().invert_yaxis()
     ax.set_xlabel('Time since discovery [days]')
     ax.set_xlim(xlim)
-    ax.set_ylabel('Luminosity [erg s^-1 Å^-1]')
+    ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
     plt.legend()
     fig.suptitle(sn)
     plt.show()

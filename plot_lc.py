@@ -8,147 +8,111 @@ import matplotlib.colors as mcolors
 import utils
 from scipy import stats
 
+LC_DIR = Path('/mnt/d/GALEXdata_v5/LCs/')
+FITS_DIR = Path('/mnt/d/GALEXdata_v5/fits/')
+
 
 def main():
 
-    fits_name = 'SN2007on-NUV.fits.gz'
-
-    # Read clean reference csv (e.g. Open Supernova Catalog)
-    ref = utils.import_osc(Path('ref/osc-pre2014-v2-clean.csv'))
-
-    fits_dir = Path('/mnt/d/GALEXdata_v5/fits/')
-    fits_file = fits_dir / Path(fits_name)
-    lc_dir = Path('/mnt/d/GALEXdata_v5/LCs/')
-    lc_file = lc_dir / Path(fits_name.split('.')[0] + '.csv')
-    lc = pd.read_csv(lc_file)
-    sn = utils.fits2sn(fits_file, ref)
-    band = fits_file.name.split('-')[-1].split('.')[0]
-
+    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
+    ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
     ned = pd.read_csv('out/scraped_table.csv', index_col='name')
-    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='File')
-    fits = fits_info.loc[fits_file.name]
-    disc_date = Time(fits['Disc. Date'], format='iso')
 
-    lc = get_lc_data(lc, sn, band, ned)
-    med, med_err = get_median(lc, disc_date)
+    sn = 'SN2007on'
 
-    plot_lc(lc, disc_date, med, med_err, fits_name)
+    disc_date = Time(ref.loc[sn, 'Disc. Date'], format='iso')
 
-    floor = med - 2 * med_err
-    flag = lc[(lc['mag_mcatbgsub'] < floor) | (lc['mag_bgsub'] < floor)]
-    print(flag)
+    lc_nuv = get_lc_data(sn, 'NUV', disc_date, ned)
+    lc_fuv = get_lc_data(sn, 'FUV', disc_date, ned)
+
+    # bg, bg_err = get_median(lc, disc_date)
+
+    plot_lc(lc_nuv, lc_fuv, sn, disc_date)
+
+    # floor = med - 2 * med_err
+    # flag = lc[(lc['mag_mcatbgsub'] < floor) | (lc['mag_bgsub'] < floor)]
+    # print(flag)
 
 
-def get_median(lc, disc_date):
+def get_background(lc, disc_date):
 
-    before = lc[lc['t_mean'] < (disc_date - 50).gps]
-    after = lc[lc['t_mean'] > (disc_date + 500).gps]
-    if len(before) > 0:
-        med = np.nanmedian(before['mag_plot'])
-        print(med)
-        med_err = np.nanstd(before['mag_plot'])
-        wgt_mean = np.average(before['mag_plot'], weights=before['mag_plot_err_1'])
-        print(wgt_mean)
-        chisquare, p = stats.chisquare(before['mag_plot'], med, ddof=len(before)-1)
-        print(chisquare / med)
-    elif len(after) > 0:
-        med = np.nanmedian(after['mag_plot'])
-        med_err = np.nanstd(after['mag_plot'])
+    before = lc[lc['t_delta'] < 0]
+    if len(before) > 1:
+        bg = np.average(before['luminosity'], weights=before['luminosity_err'])
+        bg_err = np.std(before['luminosity'])
+        chisquare, p = stats.chisquare(before['luminosity'], bg, ddof=len(before)-1)
+        print(chisquare / bg)
     else:
-        med = lc.loc[0,'mag_plot']
-        med_err = np.nanmax([lc.loc[0, 'mag_plot_err_2'], 
-                lc.loc[0, 'mag_plot_err_1']])
+        bg = lc.loc[0, 'luminosity']
+        bg_err = lc.loc[0, 'luminosity_err']
 
-    return med, med_err
+    return bg, bg_err
 
 
-def get_lc_data(lc, sn, band, ned):
+def get_lc_data(sn, band, disc_date, ned):
 
+    # Get name of light curve file
+    fits_name = utils.sn2fits(sn, band)
+    lc_file = LC_DIR / Path(fits_name.split('.')[0] + '.csv')
+
+    # Read light curve data
+    lc = pd.read_csv(lc_file)
+    lc['flags'] = lc['flags'].astype(int)
+
+    # Weed out bad flags
+    bad_flags = (1 | 2 | 16 | 64 | 128 | 512)
+    lc = lc[lc['flags'] & bad_flags == 0]
+
+    # Convert dates to MJD
     lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
-    # MCAT magnitudes and errors
-    lc['mcat'] = pd.notna(lc['mag_mcatbgsub'])
-    lc.loc[lc['mcat'], 'mag_plot_app'] = lc.loc[lc['mcat'], 'mag_mcatbgsub']
-    lc.loc[lc['mcat'], 'mag_plot_err_2'] = lc.loc[lc['mcat'], 'mag_mcatbgsub_err_2']
-    lc.loc[lc['mcat'], 'mag_plot_err_1'] = lc.loc[lc['mcat'], 'mag_mcatbgsub_err_1']
-    lc.loc[lc['mcat'], 'type'] = 'mcat'
-    # Non-MCAT magnitudes and errors
-    lc.loc[~lc['mcat'], 'mag_plot_app'] = lc.loc[~lc['mcat'], 'mag_bgsub']
-    lc.loc[~lc['mcat'], 'mag_plot_err_2'] = lc.loc[~lc['mcat'], 'mag_bgsub_err_2']
-    # fill missing lower error values
-    lc.loc[(pd.isna(lc['mag_bgsub_err_2'])) & (~lc['mcat']), 'mag_plot_err_2'] = 0
-    lc.loc[~lc['mcat'], 'mag_plot_err_1'] = lc.loc[~lc['mcat'], 'mag_bgsub_err_1']
-    lc.loc[(~lc['mcat']) & (pd.notna(lc['mag_bgsub'])), 'type'] = 'normal'
-    # Upper bounds for missing mags
-    lc.loc[pd.isna(lc['mag_plot_app']), 'mag_plot_app'] = utils.galex_ab_mag(
-            3*lc.loc[pd.isna(lc['mag_plot_app']), 'cps_bgsub_err'], band)
-    lc.loc[(~lc['mcat']) & (pd.isna(lc['mag_bgsub'])), 'type'] = 'upperlim'
-    # Absolute magnitudes
-    lc['mag_plot_abs'] = absolute_mag(sn, lc['mag_plot_app'], ned)
-    if pd.notna(lc.loc[0,'mag_plot_abs']):
-        lc['mag_plot'] = lc['mag_plot_abs']
-    else:
-        lc['mag_plot'] = lc['mag_plot_app']
+    lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
+    # Convert measured fluxes to absolute luminosities
+    lc['luminosity'] = absolute_luminosity(sn, lc['flux_bgsub'], ned)
+    lc['luminosity_err'] = absolute_luminosity(sn, lc['flux_bgsub_err'], ned)
 
     return lc
 
 
-def plot_lc(lc, disc_date, med, med_err, fits_name):
+def plot_lc(lc_nuv, lc_fuv, sn, disc_date):
 
     fig, ax = plt.subplots()
 
-    # Use absolute magnitudes if available
-    if pd.notna(lc.loc[0,'mag_plot_abs']):
-        ax.set_ylabel('Absolute Magnitude')
-    else:
-        ax.set_ylabel('AB Apparent Magnitude')
-
     # Background median of epochs before or long after discovery
-    ax.hlines(med, lc['t_mean_mjd'][0], lc.iloc[-1]['t_mean_mjd'], colors=['grey'], 
-            label='Background median')
-    ax.fill_between(lc['t_mean_mjd'], med - med_err, med + med_err, 
-            alpha=0.5, color='grey', label='Background 1σ')
-    ax.fill_between(lc['t_mean_mjd'], med - 2 * med_err, med + 2 * med_err, 
-            alpha=0.2, color='grey', label='Background 2σ')
+    # ax.hlines(med, lc['t_mean_mjd'][0], lc.iloc[-1]['t_mean_mjd'], colors=['grey'], 
+    #         label='Background median')
+    # ax.fill_between(lc['t_mean_mjd'], med - med_err, med + med_err, 
+    #         alpha=0.5, color='grey', label='Background 1σ')
+    # ax.fill_between(lc['t_mean_mjd'], med - 2 * med_err, med + 2 * med_err, 
+    #         alpha=0.2, color='grey', label='Background 2σ')
 
     # Upper limits
-    upperlim = lc[lc['type'] == 'upperlim']
-    ax.scatter(upperlim['t_mean_mjd'], upperlim['mag_plot'], 
-            marker='v', c='green', label='3σ detection limit')
+    # upperlim = lc[lc['type'] == 'upperlim']
+    # ax.scatter(upperlim['t_mean_mjd'], upperlim['mag_plot'], 
+    #         marker='v', c='green', label='3σ detection limit')
 
-    # Fluxes
-    # lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
-    # markers, caps, bars = ax.errorbar(lc['t_delta'], lc['flux_bgsub'], 
-    #         yerr=lc['flux_bgsub_err'], marker='o', linestyle='none', ms=4, 
-    #         elinewidth=1, c='blue')
-
-    # Magnitudes without MCAT errors
-    normal = lc[lc['type'] == 'normal']
-    markers, caps, bars = ax.errorbar(normal['t_mean_mjd'], normal['mag_plot'], 
-            yerr=[normal['mag_plot_err_1'], normal['mag_plot_err_2']], 
-            marker='o', linestyle='none', ms=4, elinewidth=1, c='blue',
-            label='Background-sub magnitudes'
+    # NUV fluxes
+    markers, caps, bars = ax.errorbar(lc_nuv['t_delta'], lc_nuv['luminosity'], 
+            yerr=lc_nuv['luminosity_err'], linestyle='none', marker='o', ms=4,
+            elinewidth=1, c='blue', label='NUV background-corrected flux'
     )
     [bar.set_alpha(0.8) for bar in bars]
 
-    # Magnitudes with MCAT errors
-    mcat = lc[lc['type'] == 'mcat']
-    markers, caps, bars = ax.errorbar(mcat['t_mean_mjd'], mcat['mag_plot'], 
-            yerr=[mcat['mag_plot_err_1'], mcat['mag_plot_err_2']], 
-            marker='D', linestyle='none', ms=6, elinewidth=1, c='orange',
-            label='MCAT background-sub magnitude'
+    # FUV fluxes
+    markers, caps, bars = ax.errorbar(lc_fuv['t_delta'], lc_fuv['luminosity'], 
+            yerr=lc_fuv['luminosity_err'], linestyle='none', marker='D', ms=4,
+            elinewidth=1, c='purple', label='FUV background-corrected flux'
     )
     [bar.set_alpha(0.8) for bar in bars]
-
-    # Discovery date
-    ax.axvline(disc_date.mjd, 0, 1, c='r', alpha=0.8, linestyle='--', 
-            label='Discovery date')
 
     # Configure plot
-    plt.gca().invert_yaxis()
-    ax.set_xlabel('Time [MJD]')
-    ax.set_xlim((lc['t_mean_mjd'][0] - 50, lc.iloc[-1]['t_mean_mjd'] + 50))
+    # plt.gca().invert_yaxis()
+    ax.set_xlabel('Time since discovery [days]')
+    ax.set_xlim((-50, 1000))
+    ax.set_ylabel('Luminosity [erg s^-1 Å^-1]')
+    # ax.set_yscale('log')
+    # ax.set_xlim((lc['t_mean_mjd'][0] - 50, lc.iloc[-1]['t_mean_mjd'] + 50))
     plt.legend()
-    fig.suptitle(fits_name.split('.')[0])
+    fig.suptitle(sn)
     plt.show()
 
 
@@ -169,6 +133,23 @@ def absolute_mag(sn, mags, ned):
         return mags - mod
     else:
         return np.full(list(mags), np.nan)
+
+
+def absolute_luminosity(sn, fluxes, ned):
+    """
+    Converts measured fluxes to absolute luminosities based on NED results
+    Inputs:
+        sn (str): SN name
+        mags (Array-like): measured fluxes
+        ned (DataFrame): NED scrape results
+    Outputs:
+        absolute luminosities (Array); full of nan if no h_dist is found
+    """
+
+    h_dist = ned.loc[sn, 'h_dist'] # Mpc
+    h_dist_cm = h_dist * 3.08568e24 # cm
+    luminosities = 4 * np.pi * h_dist_cm**2 * fluxes
+    return luminosities
 
 
 if __name__ == '__main__':

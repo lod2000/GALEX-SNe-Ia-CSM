@@ -54,7 +54,7 @@ def fits2sn(fits_file, ref):
 # Convert SN name to FITS file name
 def sn2fits(sn, band=None):
     fits_name = sn.replace(' ','_')
-    if platform.system() == 'Windows':
+    if platform.system() == 'Windows' or 'Microsoft' in platform.release():
         fits_name = fits_name.replace(':','_')
     if band:
         return fits_name + '-' + band + '.fits.gz'

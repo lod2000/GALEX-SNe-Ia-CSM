@@ -23,6 +23,9 @@ import matplotlib.ticker as tkr
 
 import utils
 
+FITS_INFO_FILE = 'out/fitsinfo.csv'
+
+
 def main():
 
     # Parse arguments for: fits file parent directory, SN reference info
@@ -30,36 +33,30 @@ def main():
             relative timing to SN discovery date.')
     parser.add_argument('fits_dir', metavar='dir', type=Path, help='path to \
             FITS data directory')
-    parser.add_argument('-r', '--reference', type=Path, help='path to reference\
-            CSV with SN info', default='ref/osc-pre2014-v2-clean.csv')
     args = parser.parse_args()
 
-    # Suppress Astropy warnings about, e.g., "dubious years"
+    # Suppress Astropy warnings about "dubious years", etc.
     warnings.simplefilter('ignore', category=AstropyWarning)
 
-    # Read clean reference csv (e.g. Open Supernova Catalog)
-    ref = utils.import_osc(Path(args.reference))
+    # Read Open Supernova Catalog
+    osc = utils.import_osc()
     
-    fits_files = utils.get_fits_files(args.fits_dir, ref)
-    fits_info = compile_fits(fits_files, ref)
+    fits_files = utils.get_fits_files(args.fits_dir, osc)
+    fits_info = compile_fits(fits_files, osc)
     final_sample = get_final_sample(fits_info)
     
-    try:
-        final_sample.to_csv('out/fitsinfo.csv', index=False)
-    # In case I forget to close the CSV first...
-    except PermissionError:
-        final_sample.to_csv('out/fitsinfo-tmp.csv', index=False)
+    utils.output_csv(final_sample, FITS_INFO_FILE, index=False)
 
     plot_observations(fits_info)
-    print_quick_stats(fits_info, final_sample, ref)
+    print_quick_stats(fits_info, final_sample, osc)
 
 
-def import_fits(fits_file, ref):
+def import_fits(fits_file, osc):
     """
     Imports FITS file
     Inputs:
         fits_file (Path): GALEX FITS file to import
-        ref (DataFrame): SN reference info, e.g. from OSC
+        osc (DataFrame): Open Supernova Catalog reference info
     Outputs:
         list of FITS file info, including number of observation epochs before 
         and after discovery
@@ -67,7 +64,7 @@ def import_fits(fits_file, ref):
 
     try:
         f = utils.Fits(fits_file)
-        sn = utils.SN(fits_file, ref)
+        sn = utils.SN(fits_file, osc)
     except KeyError:
         # Skip if SN isn't found in reference info, or FITS file is incomplete
         return []
@@ -81,12 +78,12 @@ def import_fits(fits_file, ref):
             f.epochs, pre, post, f.tmeans[0], f.tmeans[-1], f.filename]
 
 
-def compile_fits(fits_files, ref):
+def compile_fits(fits_files, osc):
     """
     Imports all FITS files and compiles info in single DataFrame
     Inputs:
         fits_files (list): list of paths of FITS files
-        ref (DataFrame): SN reference info, e.g. from OSC
+        osc (DataFrame): Open Supernova Catalog reference info
     Outputs:
         fits_info (DataFrame): table of info about all FITS files in fits_dir
     """
@@ -95,7 +92,7 @@ def compile_fits(fits_files, ref):
 
     with mp.Pool() as pool:
         stats = list(tqdm(
-            pool.imap(partial(import_fits, ref=ref), fits_files, chunksize=10), 
+            pool.imap(partial(import_fits, osc=osc), fits_files, chunksize=10), 
             total=len(fits_files)
         ))
 
@@ -149,17 +146,17 @@ def get_final_sample(fits_info):
     return both.sort_values(by=['Name', 'Band']).reset_index(drop=True)
 
 
-def print_quick_stats(fits_info, final_sample, ref):
+def print_quick_stats(fits_info, final_sample, osc):
     """
     Prints quick statistics about sample
     Input:
         fits_info (DataFrame): output from compile_fits
         final_sample (DataFrame): output from get_final_sample
-        ref (DataFrame): SN reference info, e.g. from OSC
+        osc (DataFrame): Open Supernova Catalog reference info
     """
 
     print('\nQuick stats:')
-    print('\tnumber of reference SNe: ' + str(len(ref)))
+    print('\tnumber of reference SNe: ' + str(len(osc)))
     sne = fits_info.drop_duplicates(['Name'])
     print('\tnumber of SNe with GALEX data: ' + str(len(sne)))
     post = get_post_obs(fits_info).drop_duplicates(['Name'])

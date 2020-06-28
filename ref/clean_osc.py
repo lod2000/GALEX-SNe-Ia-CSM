@@ -2,8 +2,11 @@
 
 import numpy as np
 import pandas as pd
-import statistics
-from astropy.coordinates import SkyCoord
+# import statistics
+# from astropy.coordinates import SkyCoord
+
+INPUT_FILE = 'OSC-pre2014-v2.csv'
+OUTPUT_FILE = 'osc-pre2014-v2-clean.csv'
 
 # Fix odd cases where R.A. or Dec. have 'AM' or 'PM' appended
 # ang: string in format 'HH:MM:SS' or 'Deg:Min:Sec'
@@ -16,9 +19,7 @@ def fix_ang(ang):
     return ang
 
 
-csvfile = 'ref/OSC-pre2014-v2.csv'
-osc = pd.read_csv(csvfile, quotechar='"',skipinitialspace=True)
-print(osc)
+osc = pd.read_csv(INPUT_FILE, quotechar='"',skipinitialspace=True)
 
 # Remove duplicate rows
 osc = osc.drop_duplicates(['Name'], keep='first')
@@ -30,13 +31,10 @@ osc = osc[osc['Disc. Date'].apply(lambda d: len(d) == 10)]
 osc.reset_index(inplace=True, drop=True)
 
 # Replace discovery date with ISO value
-newdates = []
-for date in osc['Disc. Date']:
-    if not pd.isna(date):
-        newdates.append('-'.join(str(date).split('/')))
-    else:
-        newdates.append(date)
+newdates = ['-'.join(str(date).split('/')) for date in osc['Disc. Date']]
 osc['Disc. Date'] = pd.Series(newdates, dtype=str)
+# Remove incomplete dates
+osc = osc[osc['Disc. Date'].str.len() > 9]
 
 # Replace maximum date with ISO value
 newdates = []
@@ -65,7 +63,7 @@ osc['Dec.'] = newdec
 newz = []
 for z in osc['z']:
     if pd.isna(z):
-        newz.append(np.nan)
+        newz.append(z)
     else:
         zvals = pd.Series(str(z).split(','))
         round_len = len(max(zvals,key=len)) # Number of decimals to round z average
@@ -73,6 +71,4 @@ for z in osc['z']:
         newz.append(round(zvals.mean(), round_len-1))
 osc['z'] = newz
 
-print(osc)
-
-osc.to_csv('ref/OSC-pre2014-v2-clean.csv', index=False)
+osc.to_csv(OUTPUT_FILE, index=False)

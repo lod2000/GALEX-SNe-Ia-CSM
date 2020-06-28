@@ -103,20 +103,19 @@ def redchisquare(data, model, sd, n=0):
 
 
 class SN:
-    def __init__(self, fits_file, ref):
-        name = fits2sn(fits_file, ref)
+    def __init__(self, name, osc):
         self.name = name
-        disc_date = ref.loc[name, 'Disc. Date']
+        disc_date = osc.loc[name, 'Disc. Date']
         self.disc_date = Time(str(disc_date), format='iso', out_subfmt='date')
-        max_date = ref.loc[name, 'Max Date']
+        max_date = osc.loc[name, 'Max Date']
         self.max_date = Time(str(max_date), format='iso', out_subfmt='date')
-        self.mmax = ref.loc[name, 'mmax']
-        self.host = ref.loc[name, 'Host Name']
-        self.ra = Angle(ref.loc[name, 'R.A.'] + ' hours')
-        self.dec = Angle(ref.loc[name, 'Dec.'] + ' deg')
-        self.z = ref.loc[name, 'z']
-        self.type = ref.loc[name, 'Type']
-        self.refs = ref.loc[name, 'References'].split(',')
+        self.mmax = osc.loc[name, 'mmax']
+        self.host = osc.loc[name, 'Host Name']
+        self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
+        self.dec = Angle(osc.loc[name, 'Dec.'] + ' deg')
+        self.z = osc.loc[name, 'z']
+        self.type = osc.loc[name, 'Type']
+        self.oscs = osc.loc[name, 'References'].split(',')
 
 
 class Fits:
@@ -131,11 +130,11 @@ class Fits:
         if self.header['NAXIS'] == 2:
             self.epochs = 1
             expts = [self.header['EXPTIME']]
-            tmeans = [(self.header['EXPEND'] + self.header['EXPSTART']) / 2]
+            tmeans = np.array([(self.header['EXPEND'] + self.header['EXPSTART']) / 2])
         else:
             self.epochs = self.header['NAXIS3']
             expts = [self.header['EXPT'+str(i)] for i in range(self.epochs)]
-            tmeans = [self.header['TMEAN'+str(i)] for i in range(self.epochs)]
+            tmeans = np.array([self.header['TMEAN'+str(i)] for i in range(self.epochs)])
         self.expts = np.array(expts)
         self.tmeans = Time(np.array(tmeans), format='gps')
         self.wcs = WCS(self.header)

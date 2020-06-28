@@ -64,18 +64,25 @@ def import_fits(fits_file, osc):
 
     try:
         f = utils.Fits(fits_file)
-        sn = utils.SN(fits_file, osc)
+        sn_name = utils.fits2sn(fits_file, osc)
+        sn = utils.SN(sn_name, osc)
     except KeyError:
         # Skip if SN isn't found in reference info, or FITS file is incomplete
-        return []
+        return None
 
     # Count number of GALEX epochs before / after discovery
     pre = len(f.tmeans[f.tmeans < sn.disc_date])
     post = len(f.tmeans[f.tmeans > sn.disc_date])
+    if post > 0:
+        diffs = f.tmeans.mjd - sn.disc_date.mjd
+        min_post = int(np.round(np.min(diffs[diffs >= 0]))) # earliest post-disc observation
+    else:
+        min_post = np.nan
 
-    return [sn.name, sn.disc_date.iso, f.band,
+    return [sn.name, sn.disc_date.mjd, f.band,
             f.ra.to_string(unit=u.hour), f.dec.to_string(unit=u.degree), 
-            f.epochs, pre, post, f.tmeans[0], f.tmeans[-1], f.filename]
+            f.epochs, pre, post, int(sn.disc_date.mjd - f.tmeans[0].mjd), 
+            int(f.tmeans[-1].mjd - sn.disc_date.mjd), min_post, f.filename]
 
 
 def compile_fits(fits_files, osc):
@@ -101,7 +108,8 @@ def compile_fits(fits_files, osc):
 
     fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Band',
             'R.A.', 'Dec.', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN', 
-            'First Epoch', 'Last Epoch', 'File'])
+            'First Epoch', 'Last Epoch', 'Next Epoch', 'File'])
+    fits_info = fits_info.astype({'Total Epochs':int, 'Epochs Pre-SN':int, 'Epochs Post-SN':int})
 
     return fits_info
 

@@ -24,6 +24,7 @@ import matplotlib.ticker as tkr
 import utils
 
 FITS_INFO_FILE = 'out/fitsinfo.csv'
+STATS_FILE = 'out/quick_stats.txt'
 
 
 def main():
@@ -48,7 +49,7 @@ def main():
     utils.output_csv(final_sample, FITS_INFO_FILE, index=False)
 
     plot_observations(fits_info)
-    print_quick_stats(fits_info, final_sample, osc)
+    write_quick_stats(fits_info, final_sample, osc, STATS_FILE)
 
 
 def import_fits(fits_file, osc):
@@ -154,29 +155,32 @@ def get_final_sample(fits_info):
     return both.sort_values(by=['Name', 'Band']).reset_index(drop=True)
 
 
-def print_quick_stats(fits_info, final_sample, osc):
+def write_quick_stats(fits_info, final_sample, osc, file):
     """
-    Prints quick statistics about sample
+    Writes quick statistics about sample to text file
     Input:
         fits_info (DataFrame): output from compile_fits
         final_sample (DataFrame): output from get_final_sample
         osc (DataFrame): Open Supernova Catalog reference info
+        file (Path or str): output file
     """
 
-    print('\nQuick stats:')
-    print('\tnumber of reference SNe: ' + str(len(osc)))
+    print('Writing quick stats...')
     sne = fits_info.drop_duplicates(['Name'])
-    print('\tnumber of SNe with GALEX data: ' + str(len(sne)))
     post = get_post_obs(fits_info).drop_duplicates(['Name'])
-    print('\tnumber of SNe with multiple observations after discovery: ' + str(len(post)))
     both = get_pre_post_obs(fits_info).drop_duplicates(['Name'])
-    print('\tnumber of SNe with observations before and after discovery: ' + str(len(both)))
     final_sne = final_sample.drop_duplicates(['Name'])
-    print('\tfinal sample size: ' + str(len(final_sne)))
     fuv = final_sample[final_sample['Band'] == 'FUV']
-    print('\tnumber of final SNe with FUV observations: ' + str(len(fuv)))
     nuv = final_sample[final_sample['Band'] == 'NUV']
-    print('\tnumber of final SNe with NUV observations: ' + str(len(nuv)))
+    with open(file, 'w') as f:
+        f.write('Quick stats:\n')
+        f.write('\tnumber of reference SNe: %s\n' % len(osc))
+        f.write('\tnumber of SNe with GALEX data: %s\n' % len(sne))
+        f.write('\tnumber of SNe with multiple observations after discovery: %s\n' % len(post))
+        f.write('\tnumber of SNe with observations before and after discovery: %s\n' % len(both))
+        f.write('\tfinal sample size: %s\n' % len(final_sne))
+        f.write('\tnumber of final SNe with FUV observations: %s\n' % len(fuv))
+        f.write('\tnumber of final SNe with NUV observations: %s\n' % len(nuv))
 
 
 def plot_observations(fits_info):

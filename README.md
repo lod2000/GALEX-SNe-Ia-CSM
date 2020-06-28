@@ -9,11 +9,11 @@
     * Output csv with columns:
         * SN name
         * Discovery date [MJD]
+        * GALEX filter
         * GALEX sky coords
-        * for NUV and FUV separately: total epochs, epochs before, epochs after
+        * total epochs, epochs before, epochs after
         * Time of first and last GALEX image relative to discovery [days]
         * Time between discovery and next GALEX image [days]
-    * Output list of FITS files with before + after images?
 * Compile SN reference info
     * Requires: list of SNe with data before + after discovery; z values and host names from OSC
     * Scrape NED for SN redshifts, distances, references, reddening, host morphology, position

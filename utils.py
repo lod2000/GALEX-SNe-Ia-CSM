@@ -26,7 +26,7 @@ def output_csv(df, file, **kwargs):
     try:
         df.to_csv(file, **kwargs)
     except PermissionError:
-        tmp_file = Path(file.stem + '-tmp' + file.suffix)
+        tmp_file = file.parent / Path(file.stem + '-tmp' + file.suffix)
         df.to_csv(tmp_file, **kwargs)
 
 

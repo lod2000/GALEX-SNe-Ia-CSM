@@ -14,6 +14,7 @@ from astropy import units as u
 from pathlib import Path
 from time import sleep
 import matplotlib.pyplot as plt
+import utils
 
 C = 3.e5 # km/s
 H_0 = 70. # km/s/Mpc
@@ -32,9 +33,8 @@ LATEX_TABLE_FILE = Path('out/table.tex')
 
 def main():
 
-    fits_info = pd.read_csv('out/fitsinfo.csv')
-    fits_no_dup = fits_info.drop_duplicates('Name').set_index('Name')
-    fits_info.set_index('Name', inplace=True)
+    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
+    sn_info = compress_duplicates(fits_info)
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     prev = 'o'
@@ -44,11 +44,11 @@ def main():
     # Overwrite completely
     if prev == 'o':
         ned = pd.DataFrame()
-        sne = np.array(fits_no_dup.index)
+        sne = np.array(sn_info.index)
     # Continue from previous output
     elif prev == 'c':
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
-        sne = np.array([row.name for i, row in fits_no_dup.iterrows() if row.name not in ned.index])
+        sne = np.array([row.name for i, row in sn_info.iterrows() if row.name not in ned.index])
     # Keep previous output
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
@@ -57,16 +57,13 @@ def main():
     blocks = np.arange(0, len(sne), BLOCK_SIZE)
     for b in tqdm(blocks):
         sample = sne[b:min(b+BLOCK_SIZE, len(sne))]
-        block = pd.concat([get_sn(sn, fits_no_dup, ref, verb=0) for sn in sample])
+        block = pd.concat([get_sn(sn, sn_info, ref, verb=0) for sn in sample])
         ned = pd.concat([ned, block])
-        try:
-            ned.to_csv(NED_RESULTS_FILE)
-        except PermissionError:
-            ned.to_csv(NED_RESULTS_FILE_TMP)
+        utils.output_csv(ned, NED_RESULTS_FILE)
 
     #plot_redshifts(ned)
     #print(get_catalogs(ned))
-    to_latex(ned, fits_info)
+    # to_latex(ned, sn_info)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -292,7 +289,7 @@ def get_catalogs(ned):
     return catalogs
 
 
-def to_latex(ned, fits_info):
+def to_latex(ned, sn_info):
     """
     Outputs NED scrape output and important FITS info to LaTeX table
     """
@@ -312,8 +309,13 @@ def to_latex(ned, fits_info):
     ned.sort_index(inplace=True)
     ned.reset_index(inplace=True)
     # Add epoch counts
-    # ned['epochs_total'] = np.sum(fits_info.loc[ned['name'], 'Total Epochs'])
-    # print(ned['epochs_total'])
+    ned['disc_date'] = sn_info['Disc. Date']
+    ned['epochs_total'] = sn_info['Total Epochs']
+    ned['epochs_pre'] = sn_info['Epochs Pre-SN']
+    ned['epochs_post'] = sn_info['Epochs Post-SN']
+    ned['delta_t_first'] = sn_info['First Epoch']
+    ned['delta_t_last'] = sn_info['Last Epoch']
+    ned['delta_t_next'] = sn_info['Next Epoch']
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -339,7 +341,9 @@ def to_latex(ned, fits_info):
     formatters = {'posn_ref':table_ref, 'z_ref':table_ref, 'morph_ref':table_ref}
     # Generate table with bare minimum data
     latex_table = ned.to_latex(na_rep='N/A', index=False, escape=False,
-        columns=['name', 'galex_coord', 'z_str', 'h_dist_str', 'z_ref'],
+        columns=['name', 'disc_date', 'galex_coord', 'epochs_total', 
+            'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
+            'h_dist_str', 'z_ref'],
         formatters=formatters
     )
     # Replace table header and footer with template
@@ -360,6 +364,21 @@ def table_ref(bibcode):
     Formats reference bibcodes for LaTeX table
     """
     return '\citet{%s}' % bibcode.replace('A&A', 'AandA')
+
+
+def compress_duplicates(fits_info):
+    duplicated = fits_info.groupby(['R.A.', 'Dec.'])
+    fits_info['Total Epochs'] = duplicated['Total Epochs'].transform('sum')
+    fits_info['Epochs Pre-SN'] = duplicated['Epochs Pre-SN'].transform('sum')
+    fits_info['Epochs Post-SN'] = duplicated['Epochs Post-SN'].transform('sum')
+    fits_info['First Epoch'] = duplicated['First Epoch'].transform('max')
+    fits_info['Last Epoch'] = duplicated['Last Epoch'].transform('max')
+    fits_info['Next Epoch'] = duplicated['Next Epoch'].transform('min')
+    print(fits_info)
+    fits_info.drop(['Band', 'File'], axis=1, inplace=True)
+    fits_info.drop_duplicates(inplace=True)
+    utils.output_csv(fits_info, 'out/sninfo.csv')
+    return fits_info
 
 
 if __name__ == '__main__':

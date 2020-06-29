@@ -80,7 +80,7 @@ def import_fits(fits_file, osc):
     else:
         min_post = np.nan
 
-    return [sn.name, sn.disc_date.mjd, f.band,
+    return [sn.name, sn.disc_date.iso, f.band,
             f.ra.to_string(unit=u.hour), f.dec.to_string(unit=u.degree), 
             f.epochs, pre, post, int(sn.disc_date.mjd - f.tmeans[0].mjd), 
             int(f.tmeans[-1].mjd - sn.disc_date.mjd), min_post, f.filename]

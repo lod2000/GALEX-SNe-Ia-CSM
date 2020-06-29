@@ -29,6 +29,7 @@ NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 BIB_FILE = Path('out/table_references.bib')
 LATEX_TABLE_TEMPLATE = Path('ref/deluxetable_template.tex')
 LATEX_TABLE_FILE = Path('out/table.tex')
+SHORT_TABLE_FILE = Path('out/short_table.tex')
 
 
 def main():
@@ -304,21 +305,23 @@ def to_latex(ned, sn_info):
     # Format coordinates, redshifts & distances
     ned['galex_coord'] = ned[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
     ned['z_str'] = ned['z'].round(6).astype('str').replace('0+$','',regex=True)
-    ned['h_dist_str'] = ned['h_dist'].round(0).astype(int).astype(str)
+    ned['h_dist_str'] = ned['h_dist'].round(0).astype(int)
     # Sort by SN name
     ned.sort_index(inplace=True)
     # Select SN info for relevant SNe
     sn_info = sn_info[sn_info.index.isin(ned.index)]
+    # Remove NED info not in selection
+    ned = ned[ned.index.isin(sn_info.index)]
     # Add epoch counts and other info from sn_info
-    ned['disc_date'] = sn_info['Disc. Date'].astype(str)
-    ned['epochs_total'] = sn_info['Total Epochs'].astype(int)
-    ned['epochs_pre'] = sn_info['Epochs Pre-SN'].astype(int)
-    ned['epochs_post'] = sn_info['Epochs Post-SN'].astype(int)
-    ned['delta_t_first'] = sn_info['First Epoch'].astype(int)
-    ned['delta_t_last'] = sn_info['Last Epoch'].astype(int)
-    ned['delta_t_next'] = sn_info['Next Epoch'].astype(int)
+    ned['disc_date'] = sn_info['Disc. Date']
+    ned['epochs_total'] = sn_info['Total Epochs']
+    ned['epochs_pre'] = sn_info['Epochs Pre-SN']
+    ned['epochs_post'] = sn_info['Epochs Post-SN']
+    ned['delta_t_first'] = sn_info['First Epoch']
+    ned['delta_t_last'] = sn_info['Last Epoch']
+    ned['delta_t_next'] = sn_info['Next Epoch']
     # Add notes
-    ned['notes'] = ned[['z_flag']].astype(str).replace('nan', '').agg('; '.join, axis=1)
+    ned['notes'] = ned[['z_flag']].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
     # Concat references
     ned['refs'] = ned[['z_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
 
@@ -344,13 +347,13 @@ def to_latex(ned, sn_info):
     print('Writing to LaTeX table...')
     # Format reference bibcodes
     formatters = {'refs':table_ref}
+    columns = ['name', 'disc_date', 'galex_coord', 'epochs_total', 
+            'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
+            'h_dist_str', 'a_v', 'morph', 'refs']
     # Generate table
     ned.reset_index(inplace=True)
     latex_table = ned.to_latex(na_rep='N/A', index=False, escape=False,
-        columns=['name', 'disc_date', 'galex_coord', 'epochs_total', 
-            'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
-            'h_dist_str', 'a_v', 'morph', 'refs', 'notes'],
-        formatters=formatters
+        columns=columns, formatters=formatters
     )
     # Replace table header and footer with template
     # Edit this file if you need to change the number of columns or description
@@ -358,11 +361,23 @@ def to_latex(ned, sn_info):
         dt_file = file.read()
         header = dt_file.split('===')[0]
         footer = dt_file.split('===')[1]
-    latex_table = latex_table.split('\n')[4:-3]
-    latex_table = header + '\n'.join(latex_table) + footer
+    latex_table = header + '\n'.join(latex_table.split('\n')[4:-3]) + footer
     # Write table
     with open(LATEX_TABLE_FILE, 'w') as file:
         file.write(latex_table)
+
+    # Generate short table
+    short = ned.iloc[0:20]
+    short_table = short.to_latex(na_rep='N/A', index=False, escape=False,
+        columns=columns, formatters=formatters
+    )
+    short_table = header + '\n'.join(short_table.split('\n')[4:-3]) + footer
+    with open(SHORT_TABLE_FILE, 'w') as file:
+        file.write(short_table)
+
+    # Output combined CSV
+    columns += ['notes']
+    utils.output_csv(ned[columns], 'out/combined.csv', index=False)
 
 
 def table_ref(bibcodes):
@@ -371,7 +386,7 @@ def table_ref(bibcodes):
     Input:
         bibcodes (str): list of reference codes joined with ';'
     """
-    bibcodes = bibcodes.replace('nan', '').split(';')
+    bibcodes = bibcodes.replace(';nan', '').split(';')
     bibcodes = list(dict.fromkeys(bibcodes)) # remove duplicates
     return '\citet{%s}' % ','.join([b.replace('A&A', 'AandA') for b in bibcodes])
 

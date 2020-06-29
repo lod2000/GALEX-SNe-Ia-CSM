@@ -1,10 +1,21 @@
 \begin{longrotatetable}
-\begin{deluxetable*}{lcccl}
+\movetabledown=0.5in
+\begin{deluxetable*}{lcccccccccccll}
 \tablecaption{Caption.\label{tab:Targets}}
-\tabletypesize{\footnotesize}
+\tabletypesize{\scriptsize}
+\tablewidth{700pt}
+\movetabledown=0.5in
 \tablehead{
-    \multicolumn1l{Target} & \colhead{Discovery Date} & \colhead{Coordinates} & \colhead{\galex Epochs} & \colhead{$t_\text{disc} - t_\text{first}$} & \colhead{$t_\text{last} - t_\text{disc}$} & \colhead{Nearest Epoch After Discovery} & \colhead{Redshift} & \colhead{Distance} & \colhead{$a_V$} & \colhead{Host Morphology} & \multicolumn1l{Reference(s)} & \colhead{Notes}\\
-    \multicolumn1l{Name} & \colhead{} & \colhead{$\alpha$, $\delta$ (J2000)} & \colhead{} & \colhead{[days]} & \colhead{[days]} & \colhead{[days]} & \colhead{} & \colhead{[Mpc]} & \colhead{[mag]} & \colhead{} & \colhead{} & \colhead{}
+    \multicolumn1l{Target} & \colhead{Disc. Date} & \colhead{\galex Coordinates} & 
+    \colhead{Obs.} & \colhead{$t_\text{disc} - t_\text{first}$} & 
+    \colhead{$t_\text{last} - t_\text{disc}$} & \colhead{$\Delta t_\text{nearest}$} & 
+    \colhead{Redshift} & \colhead{Distance} & \colhead{$a_V$} & 
+    \colhead{Host} & \multicolumn1l{Reference(s)} \\
+    \multicolumn1l{Name} & \colhead{} & \colhead{$\alpha$, $\delta$ (J2000)} & 
+    \colhead{Epochs} & \colhead{[days]} & 
+    \colhead{[days]} & \colhead{[days]} & 
+    \colhead{} & \colhead{[Mpc]} & \colhead{[mag]} & 
+    \colhead{Morph.} & \colhead{}
 }
 \startdata
 ===

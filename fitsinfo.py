@@ -23,6 +23,10 @@ import matplotlib.ticker as tkr
 
 import utils
 
+FITS_INFO_FILE = 'out/fitsinfo.csv'
+STATS_FILE = 'out/quick_stats.txt'
+
+
 def main():
 
     # Parse arguments for: fits file parent directory, SN reference info
@@ -30,36 +34,30 @@ def main():
             relative timing to SN discovery date.')
     parser.add_argument('fits_dir', metavar='dir', type=Path, help='path to \
             FITS data directory')
-    parser.add_argument('-r', '--reference', type=Path, help='path to reference\
-            CSV with SN info', default='ref/osc-pre2014-v2-clean.csv')
     args = parser.parse_args()
 
-    # Suppress Astropy warnings about, e.g., "dubious years"
+    # Suppress Astropy warnings about "dubious years", etc.
     warnings.simplefilter('ignore', category=AstropyWarning)
 
-    # Read clean reference csv (e.g. Open Supernova Catalog)
-    ref = utils.import_osc(Path(args.reference))
+    # Read Open Supernova Catalog
+    osc = utils.import_osc()
     
-    fits_files = utils.get_fits_files(args.fits_dir, ref)
-    fits_info = compile_fits(fits_files, ref)
+    fits_files = utils.get_fits_files(args.fits_dir, osc)
+    fits_info = compile_fits(fits_files, osc)
     final_sample = get_final_sample(fits_info)
     
-    try:
-        final_sample.to_csv('out/fitsinfo.csv', index=False)
-    # In case I forget to close the CSV first...
-    except PermissionError:
-        final_sample.to_csv('out/fitsinfo-tmp.csv', index=False)
+    utils.output_csv(final_sample, FITS_INFO_FILE, index=False)
 
     plot_observations(fits_info)
-    print_quick_stats(fits_info, final_sample, ref)
+    write_quick_stats(fits_info, final_sample, osc, STATS_FILE)
 
 
-def import_fits(fits_file, ref):
+def import_fits(fits_file, osc):
     """
     Imports FITS file
     Inputs:
         fits_file (Path): GALEX FITS file to import
-        ref (DataFrame): SN reference info, e.g. from OSC
+        osc (DataFrame): Open Supernova Catalog reference info
     Outputs:
         list of FITS file info, including number of observation epochs before 
         and after discovery
@@ -67,26 +65,33 @@ def import_fits(fits_file, ref):
 
     try:
         f = utils.Fits(fits_file)
-        sn = utils.SN(fits_file, ref)
+        sn_name = utils.fits2sn(fits_file, osc)
+        sn = utils.SN(sn_name, osc)
     except KeyError:
         # Skip if SN isn't found in reference info, or FITS file is incomplete
-        return []
+        return None
 
     # Count number of GALEX epochs before / after discovery
     pre = len(f.tmeans[f.tmeans < sn.disc_date])
     post = len(f.tmeans[f.tmeans > sn.disc_date])
+    if post > 0:
+        diffs = f.tmeans.mjd - sn.disc_date.mjd
+        min_post = int(np.round(np.min(diffs[diffs >= 0]))) # earliest post-disc observation
+    else:
+        min_post = np.nan
 
-    return [sn.name, sn.disc_date.iso, f.band,
+    return [sn.name, sn.disc_date.mjd, f.band,
             f.ra.to_string(unit=u.hour), f.dec.to_string(unit=u.degree), 
-            f.epochs, pre, post, f.tmeans[0], f.tmeans[-1], f.filename]
+            f.epochs, pre, post, int(sn.disc_date.mjd - f.tmeans[0].mjd), 
+            int(f.tmeans[-1].mjd - sn.disc_date.mjd), min_post, f.filename]
 
 
-def compile_fits(fits_files, ref):
+def compile_fits(fits_files, osc):
     """
     Imports all FITS files and compiles info in single DataFrame
     Inputs:
         fits_files (list): list of paths of FITS files
-        ref (DataFrame): SN reference info, e.g. from OSC
+        osc (DataFrame): Open Supernova Catalog reference info
     Outputs:
         fits_info (DataFrame): table of info about all FITS files in fits_dir
     """
@@ -95,7 +100,7 @@ def compile_fits(fits_files, ref):
 
     with mp.Pool() as pool:
         stats = list(tqdm(
-            pool.imap(partial(import_fits, ref=ref), fits_files, chunksize=10), 
+            pool.imap(partial(import_fits, osc=osc), fits_files, chunksize=10), 
             total=len(fits_files)
         ))
 
@@ -104,7 +109,8 @@ def compile_fits(fits_files, ref):
 
     fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Band',
             'R.A.', 'Dec.', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN', 
-            'First Epoch', 'Last Epoch', 'File'])
+            'First Epoch', 'Last Epoch', 'Next Epoch', 'File'])
+    fits_info = fits_info.astype({'Total Epochs':int, 'Epochs Pre-SN':int, 'Epochs Post-SN':int})
 
     return fits_info
 
@@ -149,29 +155,32 @@ def get_final_sample(fits_info):
     return both.sort_values(by=['Name', 'Band']).reset_index(drop=True)
 
 
-def print_quick_stats(fits_info, final_sample, ref):
+def write_quick_stats(fits_info, final_sample, osc, file):
     """
-    Prints quick statistics about sample
+    Writes quick statistics about sample to text file
     Input:
         fits_info (DataFrame): output from compile_fits
         final_sample (DataFrame): output from get_final_sample
-        ref (DataFrame): SN reference info, e.g. from OSC
+        osc (DataFrame): Open Supernova Catalog reference info
+        file (Path or str): output file
     """
 
-    print('\nQuick stats:')
-    print('\tnumber of reference SNe: ' + str(len(ref)))
+    print('Writing quick stats...')
     sne = fits_info.drop_duplicates(['Name'])
-    print('\tnumber of SNe with GALEX data: ' + str(len(sne)))
     post = get_post_obs(fits_info).drop_duplicates(['Name'])
-    print('\tnumber of SNe with multiple observations after discovery: ' + str(len(post)))
     both = get_pre_post_obs(fits_info).drop_duplicates(['Name'])
-    print('\tnumber of SNe with observations before and after discovery: ' + str(len(both)))
     final_sne = final_sample.drop_duplicates(['Name'])
-    print('\tfinal sample size: ' + str(len(final_sne)))
     fuv = final_sample[final_sample['Band'] == 'FUV']
-    print('\tnumber of final SNe with FUV observations: ' + str(len(fuv)))
     nuv = final_sample[final_sample['Band'] == 'NUV']
-    print('\tnumber of final SNe with NUV observations: ' + str(len(nuv)))
+    with open(file, 'w') as f:
+        f.write('Quick stats:\n')
+        f.write('\tnumber of reference SNe: %s\n' % len(osc))
+        f.write('\tnumber of SNe with GALEX data: %s\n' % len(sne))
+        f.write('\tnumber of SNe with multiple observations after discovery: %s\n' % len(post))
+        f.write('\tnumber of SNe with observations before and after discovery: %s\n' % len(both))
+        f.write('\tfinal sample size: %s\n' % len(final_sne))
+        f.write('\tnumber of final SNe with FUV observations: %s\n' % len(fuv))
+        f.write('\tnumber of final SNe with NUV observations: %s\n' % len(nuv))
 
 
 def plot_observations(fits_info):

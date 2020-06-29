@@ -63,7 +63,7 @@ def main():
 
     #plot_redshifts(ned)
     #print(get_catalogs(ned))
-    # to_latex(ned, sn_info)
+    to_latex(ned, sn_info)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -304,18 +304,23 @@ def to_latex(ned, sn_info):
     # Format coordinates, redshifts & distances
     ned['galex_coord'] = ned[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
     ned['z_str'] = ned['z'].round(6).astype('str').replace('0+$','',regex=True)
-    ned['h_dist_str'] = ned['h_dist'].round().astype('str').replace('.','')
+    ned['h_dist_str'] = ned['h_dist'].round(0).astype(int).astype(str)
     # Sort by SN name
     ned.sort_index(inplace=True)
-    ned.reset_index(inplace=True)
-    # Add epoch counts
-    ned['disc_date'] = sn_info['Disc. Date']
-    ned['epochs_total'] = sn_info['Total Epochs']
-    ned['epochs_pre'] = sn_info['Epochs Pre-SN']
-    ned['epochs_post'] = sn_info['Epochs Post-SN']
-    ned['delta_t_first'] = sn_info['First Epoch']
-    ned['delta_t_last'] = sn_info['Last Epoch']
-    ned['delta_t_next'] = sn_info['Next Epoch']
+    # Select SN info for relevant SNe
+    sn_info = sn_info[sn_info.index.isin(ned.index)]
+    # Add epoch counts and other info from sn_info
+    ned['disc_date'] = sn_info['Disc. Date'].astype(str)
+    ned['epochs_total'] = sn_info['Total Epochs'].astype(int)
+    ned['epochs_pre'] = sn_info['Epochs Pre-SN'].astype(int)
+    ned['epochs_post'] = sn_info['Epochs Post-SN'].astype(int)
+    ned['delta_t_first'] = sn_info['First Epoch'].astype(int)
+    ned['delta_t_last'] = sn_info['Last Epoch'].astype(int)
+    ned['delta_t_next'] = sn_info['Next Epoch'].astype(int)
+    # Add notes
+    ned['notes'] = ned[['z_flag']].astype(str).replace('nan', '').agg('; '.join, axis=1)
+    # Concat references
+    ned['refs'] = ned[['z_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -338,12 +343,13 @@ def to_latex(ned, sn_info):
 
     print('Writing to LaTeX table...')
     # Format reference bibcodes
-    formatters = {'posn_ref':table_ref, 'z_ref':table_ref, 'morph_ref':table_ref}
-    # Generate table with bare minimum data
+    formatters = {'refs':table_ref}
+    # Generate table
+    ned.reset_index(inplace=True)
     latex_table = ned.to_latex(na_rep='N/A', index=False, escape=False,
         columns=['name', 'disc_date', 'galex_coord', 'epochs_total', 
             'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
-            'h_dist_str', 'z_ref'],
+            'h_dist_str', 'a_v', 'morph', 'refs', 'notes'],
         formatters=formatters
     )
     # Replace table header and footer with template
@@ -359,11 +365,15 @@ def to_latex(ned, sn_info):
         file.write(latex_table)
 
 
-def table_ref(bibcode):
+def table_ref(bibcodes):
     """
     Formats reference bibcodes for LaTeX table
+    Input:
+        bibcodes (str): list of reference codes joined with ';'
     """
-    return '\citet{%s}' % bibcode.replace('A&A', 'AandA')
+    bibcodes = bibcodes.replace('nan', '').split(';')
+    bibcodes = list(dict.fromkeys(bibcodes)) # remove duplicates
+    return '\citet{%s}' % ','.join([b.replace('A&A', 'AandA') for b in bibcodes])
 
 
 def compress_duplicates(fits_info):
@@ -374,7 +384,6 @@ def compress_duplicates(fits_info):
     fits_info['First Epoch'] = duplicated['First Epoch'].transform('max')
     fits_info['Last Epoch'] = duplicated['Last Epoch'].transform('max')
     fits_info['Next Epoch'] = duplicated['Next Epoch'].transform('min')
-    print(fits_info)
     fits_info.drop(['Band', 'File'], axis=1, inplace=True)
     fits_info.drop_duplicates(inplace=True)
     utils.output_csv(fits_info, 'out/sninfo.csv')

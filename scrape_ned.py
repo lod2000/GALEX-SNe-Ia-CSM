@@ -27,6 +27,7 @@ BLOCK_SIZE = 10
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
 NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
 BIB_FILE = Path('out/table_references.bib')
+CAT_FILE = Path('out/catalog_codes.txt')
 LATEX_TABLE_TEMPLATE = Path('ref/deluxetable_template.tex')
 LATEX_TABLE_FILE = Path('out/table.tex')
 SHORT_TABLE_FILE = Path('out/short_table.tex')
@@ -63,7 +64,6 @@ def main():
         utils.output_csv(ned, NED_RESULTS_FILE)
 
     #plot_redshifts(ned)
-    #print(get_catalogs(ned))
     to_latex(ned, sn_info)
 
 
@@ -287,6 +287,9 @@ def get_catalogs(ned):
     for col in ref_cols:
         catalogs += list(ned[ned['posn_ref'].str.contains(':')]['posn_ref'])
     catalogs = list(dict.fromkeys(catalogs))
+    catalog_str = '\n'.join(catalogs)
+    with open(CAT_FILE, 'w') as file:
+        file.write(catalog_str)
     return catalogs
 
 
@@ -376,8 +379,12 @@ def to_latex(ned, sn_info):
         file.write(short_table)
 
     # Output combined CSV
-    columns += ['notes']
+    columns += ['notes', 'z_ref', 'morph_ref']
+    columns -= ['refs']
     utils.output_csv(ned[columns], 'out/combined.csv', index=False)
+
+    # Catalog bibcodes (NED has a weird format)
+    get_catalogs(ned)
 
 
 def table_ref(bibcodes):

@@ -16,10 +16,8 @@ DETRAD_CUT = 0.55 # deg
 
 def main():
 
-    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sn_info = pd.read_csv('out/sninfo.csv', index_col='Name')
-    osc = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
-    ned = pd.read_csv('out/scraped_table.csv', index_col='name')
+    sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
+    osc = pd.read_csv('ref/osc.csv', index_col='Name')
 
     # Initialize output DataFrames
     flagged_points = []    
@@ -37,7 +35,7 @@ def main():
         # Initialize plot
         fig, ax = plt.subplots()
         xlim = (-50, 1000)
-        disc_date = Time(sn_info.loc[sn, 'Disc. Date'], format='iso')
+        disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
 
         bands = ['FUV', 'NUV']
         colors = ['purple', 'blue']
@@ -47,7 +45,7 @@ def main():
         for band, color, marker in zip(bands, colors, marker_styles):
             # Import light curve file, if it exists
             try:
-                lc = get_lc_data(sn, band, sn_info, ned)
+                lc = get_lc_data(sn, band, sn_info)
             except FileNotFoundError:
                 continue
 
@@ -165,7 +163,7 @@ def get_background(lc):
     return bg, bg_err, sys_err
 
 
-def get_lc_data(sn, band, sn_info, ned):
+def get_lc_data(sn, band, sn_info):
     """
     Imports light curve file for specified SN and band. Cuts points with bad
     flags or sources outside detector radius, and also fixes duplicated headers.
@@ -173,7 +171,6 @@ def get_lc_data(sn, band, sn_info, ned):
         sn (str): SN name
         band (str): 'FUV' or 'NUV'
         sn_info (DataFrame)
-        ned (DataFrame)
     Output:
         lc (DataFrame): light curve table
     """
@@ -182,7 +179,7 @@ def get_lc_data(sn, band, sn_info, ned):
     fits_name = utils.sn2fits(sn, band)
     lc_file = LC_DIR / Path(fits_name.split('.')[0] + '.csv')
     # Discovery date
-    disc_date = Time(sn_info.loc[sn, 'Disc. Date'], format='iso')
+    disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
 
     # Read light curve data
     lc = pd.read_csv(lc_file)
@@ -209,24 +206,24 @@ def get_lc_data(sn, band, sn_info, ned):
     lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
     lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
     # Convert measured fluxes to absolute luminosities
-    lc['luminosity'] = absolute_luminosity(sn, lc['flux_bgsub'], ned)
-    lc['luminosity_err'] = absolute_luminosity(sn, lc['flux_bgsub_err'], ned)
+    lc['luminosity'] = absolute_luminosity(sn, lc['flux_bgsub'], sn_info)
+    lc['luminosity_err'] = absolute_luminosity(sn, lc['flux_bgsub_err'], sn_info)
 
     return lc
 
 
-def absolute_mag(sn, mags, ned):
+def absolute_mag(sn, mags, sn_info):
     """
     Converts apparent magnitudes to absolute magnitudes based on NED results
     Inputs:
         sn (str): SN name
         mags (Array-like): apparent magnitudes
-        ned (DataFrame): NED scrape results
+        sn_info (DataFrame): includes NED scrape results
     Outputs:
         absolute magnitudes (Array); full of nan if no h_dist is found
     """
 
-    h_dist = ned.loc[sn, 'h_dist'] # Mpc
+    h_dist = sn_info.loc[sn, 'h_dist'] # Mpc
     if pd.notna(h_dist):
         mod = 5 * np.log10(h_dist * 1e6) - 5 # distance modulus
         return mags - mod
@@ -234,18 +231,18 @@ def absolute_mag(sn, mags, ned):
         return np.full(list(mags), np.nan)
 
 
-def absolute_luminosity(sn, fluxes, ned):
+def absolute_luminosity(sn, fluxes, sn_info):
     """
     Converts measured fluxes to absolute luminosities based on NED results
     Inputs:
         sn (str): SN name
         mags (Array-like): measured fluxes
-        ned (DataFrame): NED scrape results
+        sn_info (DataFrame): includes NED scrape results
     Outputs:
         absolute luminosities (Array); full of nan if no h_dist is found
     """
 
-    h_dist = ned.loc[sn, 'h_dist'] # Mpc
+    h_dist = sn_info.loc[sn, 'h_dist'] # Mpc
     h_dist_cm = h_dist * 3.08568e24 # cm
     luminosities = 4 * np.pi * h_dist_cm**2 * fluxes
     return luminosities

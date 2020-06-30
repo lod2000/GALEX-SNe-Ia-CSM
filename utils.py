@@ -7,7 +7,7 @@ from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.wcs import WCS
 
-OSC_FILE = Path('ref/OSC-pre2014-v2-clean.csv')
+OSC_FILE = Path('ref/osc.csv')
 
 
 def output_csv(df, file, **kwargs):

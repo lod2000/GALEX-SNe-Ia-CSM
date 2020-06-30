@@ -32,8 +32,7 @@ def main():
     flags = [int(2 ** n) for n in range(0,10)]
 
     print('Plotting light curves...')
-    for sn in tqdm(sn_info.index[0:1]):
-        sn = 'SN2007on'
+    for sn in tqdm(sn_info.index):
 
         # Initialize plot
         fig, ax = plt.subplots()
@@ -91,15 +90,16 @@ def main():
             [bar.set_alpha(0.8) for bar in bars]
 
         # Configure plot
-        ax.set_xlabel('Time since discovery [days]')
-        ax.set_xlim(xlim)
-        ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
-        ax.set_ylim(0, None)
-        plt.legend()
-        fig.suptitle(sn)
-        plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
-        plt.show()
-        # plt.cslose()
+        if len(lc.index) > 0:
+            ax.set_xlabel('Time since discovery [days]')
+            ax.set_xlim(xlim)
+            ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
+            ax.set_ylim(0, None)
+            plt.legend()
+            fig.suptitle(sn)
+            plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
+            # plt.show()
+        plt.close()
 
     # Output DataFrame of background, bg error, and sys error
     # Right now outputs luminosity; may want to change to flux later
@@ -157,9 +157,9 @@ def get_background(lc):
             bg = np.average(data, weights=new_err)
             bg_err = np.sqrt(np.sum(new_err ** 2))
     else:
-        # TODO improve error estimate
-        bg = lc.loc[0, 'luminosity']
-        bg_err = lc.loc[0, 'luminosity_err']
+        # TODO improve sys error estimate (from gPhoton)
+        bg = lc.iloc[0]['luminosity']
+        bg_err = lc.iloc[0]['luminosity_err']
         sys_err = np.nan
 
     return bg, bg_err, sys_err

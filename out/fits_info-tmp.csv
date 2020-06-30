@@ -1,0 +1,3 @@
+Name,Disc. Date,Band,R.A.,Dec.,Total Epochs,Epochs Pre-SN,Epochs Post-SN,First Epoch,Last Epoch,Next Epoch,File
+Aki,2006-06-19,FUV,22h16m01.077s,-17d37m22.09s,96,48,48,1023,795,42,Aki-FUV.fits.gz
+Aki,2006-06-19,NUV,22h16m01.077s,-17d37m22.09s,109,55,54,1023,1190,42,Aki-NUV.fits.gz

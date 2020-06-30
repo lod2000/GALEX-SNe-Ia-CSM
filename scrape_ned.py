@@ -34,8 +34,8 @@ SHORT_TABLE_FILE = Path('out/short_table.tex')
 
 def main():
 
-    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sn_info = compress_duplicates(fits_info)
+    fits_info = pd.read_csv('ref/fits_info.csv', index_col='Name')
+    sn_info = pd.read_csv('ref/sn_info.csv', index_col='Name')
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     prev = 'o'

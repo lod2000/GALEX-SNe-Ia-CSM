@@ -23,7 +23,8 @@ import matplotlib.ticker as tkr
 
 import utils
 
-FITS_INFO_FILE = 'out/fitsinfo.csv'
+FITS_INFO_FILE = 'ref/fits_info.csv'
+SN_INFO_FILE = 'ref/sn_info.csv'
 STATS_FILE = 'out/quick_stats.txt'
 
 
@@ -42,14 +43,23 @@ def main():
     # Read Open Supernova Catalog
     osc = utils.import_osc()
     
+    # Get all FITS file paths
     fits_files = utils.get_fits_files(args.fits_dir, osc)
+    # Import all FITS files
     fits_info = compile_fits(fits_files, osc)
-    final_sample = get_final_sample(fits_info)
-    
-    utils.output_csv(final_sample, FITS_INFO_FILE, index=False)
+    # Select only those with before+after observations
+    final_sample = get_final_sample(fits_info) 
+    utils.output_csv(final_sample, FITS_INFO_FILE)
 
+    # Output compressed CSV without SN name duplicates
+    sn_info = compress_duplicates(final_sample.copy())
+    utils.output_csv(sn_info, SN_INFO_FILE)
+
+    # Plot histogram of observations
     plot_observations(fits_info)
-    write_quick_stats(fits_info, final_sample, osc, STATS_FILE)
+
+    # Write a few statistics about FITS files
+    write_quick_stats(fits_info, final_sample, sn_info, osc, STATS_FILE)
 
 
 def import_fits(fits_file, osc):
@@ -152,24 +162,50 @@ def get_final_sample(fits_info):
     # post = get_post_obs(fits_info)
     both = get_pre_post_obs(fits_info)
     # return post.append(both).sort_values(by=['Name', 'Band']).reset_index(drop=True)
-    return both.sort_values(by=['Name', 'Band']).reset_index(drop=True)
+    sample = both.sort_values(by=['Name', 'Band']).set_index('Name', drop=True)
+    print(sample)
+    return sample
 
 
-def write_quick_stats(fits_info, final_sample, osc, file):
+def compress_duplicates(fits_info):
+    """
+    Compressses fits_info down to one entry per SN (removing band-specific
+    information). Observation epochs are summed, and first/last/next epochs are
+    maximized.
+    Input:
+        fits_info (DataFrame): FITS file-specific information
+    Output:
+        sn_info (DataFrame): SN-specific information
+    """
+
+    duplicated = fits_info.groupby(['R.A.', 'Dec.'])
+    fits_info['Total Epochs'] = duplicated['Total Epochs'].transform('sum')
+    fits_info['Epochs Pre-SN'] = duplicated['Epochs Pre-SN'].transform('sum')
+    fits_info['Epochs Post-SN'] = duplicated['Epochs Post-SN'].transform('sum')
+    fits_info['First Epoch'] = duplicated['First Epoch'].transform('max')
+    fits_info['Last Epoch'] = duplicated['Last Epoch'].transform('max')
+    fits_info['Next Epoch'] = duplicated['Next Epoch'].transform('min')
+    fits_info.drop(['Band', 'File'], axis=1, inplace=True)
+    sn_info = fits_info.drop_duplicates()
+    return sn_info
+
+
+def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
     """
     Writes quick statistics about sample to text file
     Input:
         fits_info (DataFrame): output from compile_fits
         final_sample (DataFrame): output from get_final_sample
+        sn_info (DataFrame): output from compress_duplicates
         osc (DataFrame): Open Supernova Catalog reference info
         file (Path or str): output file
     """
 
     print('Writing quick stats...')
-    sne = fits_info.drop_duplicates(['Name'])
+    sne = fits_info.loc[fits_info.index.drop_duplicates()]
     post = get_post_obs(fits_info).drop_duplicates(['Name'])
     both = get_pre_post_obs(fits_info).drop_duplicates(['Name'])
-    final_sne = final_sample.drop_duplicates(['Name'])
+    # final_sne = final_sample.drop_duplicates(['Name'])
     fuv = final_sample[final_sample['Band'] == 'FUV']
     nuv = final_sample[final_sample['Band'] == 'NUV']
     with open(file, 'w') as f:
@@ -178,7 +214,7 @@ def write_quick_stats(fits_info, final_sample, osc, file):
         f.write('\tnumber of SNe with GALEX data: %s\n' % len(sne))
         f.write('\tnumber of SNe with multiple observations after discovery: %s\n' % len(post))
         f.write('\tnumber of SNe with observations before and after discovery: %s\n' % len(both))
-        f.write('\tfinal sample size: %s\n' % len(final_sne))
+        f.write('\tfinal sample size: %s\n' % len(sn_info.index))
         f.write('\tnumber of final SNe with FUV observations: %s\n' % len(fuv))
         f.write('\tnumber of final SNe with NUV observations: %s\n' % len(nuv))
 

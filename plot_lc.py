@@ -6,7 +6,7 @@ from astropy.time import Time
 import matplotlib.markers as mmarkers
 import matplotlib.colors as mcolors
 import utils
-from scipy import stats
+from statsmodels.stats.weightstats import DescrStatsW
 from tqdm import tqdm
 
 LC_DIR = Path('/mnt/d/GALEXdata_v6/LCs/')
@@ -98,8 +98,8 @@ def main():
         plt.legend()
         fig.suptitle(sn)
         plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
-        # plt.show()
-        plt.close()
+        plt.show()
+        # plt.cslose()
 
     # Output DataFrame of background, bg error, and sys error
     # Right now outputs luminosity; may want to change to flux later
@@ -141,9 +141,11 @@ def get_background(lc):
     err = np.array(before['luminosity_err'])
     if len(before) > 1:
         # Determine background from weighted average of data before discovery
-        bg = np.average(data, weights=err)
-        # bg_err = np.std(data)
-        bg_err = np.sqrt(np.sum(err ** 2))
+        weighted_stats = DescrStatsW(data, weights=err, ddof=0)
+        bg = weighted_stats.mean
+        bg_err = weighted_stats.std_mean
+        # bg = np.average(data, weights=err)
+        # bg_err = np.sqrt(np.sum(err ** 2))
         # Reduced chi squared test of data vs background
         rcs = utils.redchisquare(data, np.full(data.size, bg), err, n=0)
         sys_err = err[0] * 0.1
@@ -155,6 +157,7 @@ def get_background(lc):
             bg = np.average(data, weights=new_err)
             bg_err = np.sqrt(np.sum(new_err ** 2))
     else:
+        # TODO improve error estimate
         bg = lc.loc[0, 'luminosity']
         bg_err = lc.loc[0, 'luminosity_err']
         sys_err = np.nan

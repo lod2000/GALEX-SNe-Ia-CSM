@@ -23,7 +23,7 @@ import matplotlib.ticker as tkr
 
 import utils
 
-FITS_INFO_FILE = 'ref/fits_info.csv'
+FITS_INFO_FILE = Path('ref/fits_info.csv')
 SN_INFO_FILE = 'ref/sn_info.csv'
 STATS_FILE = 'out/quick_stats.txt'
 
@@ -43,11 +43,21 @@ def main():
     # Read Open Supernova Catalog
     osc = utils.import_osc()
     
-    # Get all FITS file paths
-    fits_files = utils.get_fits_files(args.fits_dir, osc)
-    # Import all FITS files
-    fits_info = compile_fits(fits_files, osc)
-    utils.output_csv(fits_info, FITS_INFO_FILE)
+    # Option to overwrite or keep
+    overwrite = True
+    if FITS_INFO_FILE.is_file():
+        over_in = input('Previous FITS info file detected. Overwrite? [y/N] ')
+        overwrite = (over_in == 'y')
+
+    if overwrite:
+        # Get all FITS file paths
+        fits_files = utils.get_fits_files(args.fits_dir, osc)
+        # Import all FITS files
+        fits_info = compile_fits(fits_files, osc)
+        utils.output_csv(fits_info, FITS_INFO_FILE, index=False)
+    else:
+        fits_info = pd.read_csv(FITS_INFO_FILE)
+
     # Select only those with before+after observations
     final_sample = get_final_sample(fits_info) 
 
@@ -163,7 +173,6 @@ def get_final_sample(fits_info):
     both = get_pre_post_obs(fits_info)
     # return post.append(both).sort_values(by=['Name', 'Band']).reset_index(drop=True)
     sample = both.sort_values(by=['Name', 'Band']).set_index('Name', drop=True)
-    print(sample)
     return sample
 
 
@@ -179,14 +188,15 @@ def compress_duplicates(fits_info):
     """
 
     duplicated = fits_info.groupby(['R.A.', 'Dec.'])
-    fits_info['Total Epochs'] = duplicated['Total Epochs'].transform('sum')
-    fits_info['Epochs Pre-SN'] = duplicated['Epochs Pre-SN'].transform('sum')
-    fits_info['Epochs Post-SN'] = duplicated['Epochs Post-SN'].transform('sum')
-    fits_info['First Epoch'] = duplicated['First Epoch'].transform('max')
-    fits_info['Last Epoch'] = duplicated['Last Epoch'].transform('max')
-    fits_info['Next Epoch'] = duplicated['Next Epoch'].transform('min')
-    fits_info.drop(['Band', 'File'], axis=1, inplace=True)
-    sn_info = fits_info.drop_duplicates()
+    sn_info = pd.DataFrame([], index=pd.Series(fits_info.index, name='name'))
+    sn_info[['disc_date', 'galex_ra', 'galex_dec']] = fits_info[['Disc. Date', 'R.A.', 'Dec.']].copy()
+    sn_info['epochs_total'] = duplicated['Total Epochs'].transform('sum')
+    sn_info['epochs_pre'] = duplicated['Epochs Pre-SN'].transform('sum')
+    sn_info['epochs_post'] = duplicated['Epochs Post-SN'].transform('sum')
+    sn_info['delta_t_first'] = duplicated['First Epoch'].transform('max')
+    sn_info['delta_t_last'] = duplicated['Last Epoch'].transform('max')
+    sn_info['delta_t_next'] = duplicated['Next Epoch'].transform('min')
+    sn_info = sn_info.drop_duplicates()
     return sn_info
 
 

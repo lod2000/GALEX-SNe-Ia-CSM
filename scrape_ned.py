@@ -24,19 +24,19 @@ WMAP = 4
 CORR_Z = 1
 QUERY_RADIUS = 5. # arcmin
 BLOCK_SIZE = 10
-NED_RESULTS_FILE = Path('out/scraped_table.csv')
-BIB_FILE = Path('bib/table_references.bib')
-CAT_FILE = Path('bib/catalog_codes.txt')
-LATEX_TABLE_TEMPLATE = Path('ref/deluxetable_template.tex')
-LATEX_TABLE_FILE = Path('out/table.tex')
-SHORT_TABLE_FILE = Path('out/short_table.tex')
+SN_INFO_FILE = Path('ref/sn_info.csv')
+NED_RESULTS_FILE = Path('ref/ned.csv')
+BIB_FILE = Path('tex/table_references.bib')
+CAT_FILE = Path('tex/catalog_codes.txt')
+LATEX_TABLE_TEMPLATE = Path('tex/deluxetable_template.tex')
+LATEX_TABLE_FILE = Path('tex/table.tex')
+SHORT_TABLE_FILE = Path('tex/short_table.tex')
 
 
 def main():
 
-    fits_info = pd.read_csv('ref/fits_info.csv', index_col='Name')
-    sn_info = pd.read_csv('ref/sn_info.csv', index_col='Name')
-    ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
+    sn_info = pd.read_csv(SN_INFO_FILE, index_col='name')
+    osc = utils.import_osc()
 
     prev = 'o'
     if NED_RESULTS_FILE.is_file():
@@ -55,53 +55,58 @@ def main():
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
         sne = np.array([])
 
+    # Query NED for all SNe, appending to csv every 10 steps
     blocks = np.arange(0, len(sne), BLOCK_SIZE)
     for b in tqdm(blocks):
         sample = sne[b:min(b+BLOCK_SIZE, len(sne))]
-        block = pd.concat([get_sn(sn, sn_info, ref, verb=0) for sn in sample])
+        block = pd.concat([get_sn(sn, sn_info, osc, verb=0) for sn in sample])
         ned = pd.concat([ned, block])
         utils.output_csv(ned, NED_RESULTS_FILE)
 
+    # Combine sn_info and ned
+    sn_info = combine_sn_info(ned, sn_info)
+    utils.output_csv(sn_info, SN_INFO_FILE)
+
     #plot_redshifts(ned)
-    to_latex(ned, sn_info)
+    to_latex(sn_info)
 
 
-def get_sn(sn, fits_info, ref, verb=0):
+def get_sn(sn, sn_info, osc, verb=0):
     """
     Retrieve SN info from NED. Uses astroquery to retrieve target names, then
     web scrapes to get target info.
     Inputs:
         sn (str): SN name
-        fits_info (DataFrame): FITS file info, with duplicate entries removed
-        ref (DataFrame): SN reference info, e.g. from OSC
+        sn_info (DataFrame): FITS file info, with duplicate entries removed
+        osc (DataFrame): Open Supernova Catalog reference info
         verb (int or bool, optional): vebrose output? default: False
     Output:
-        sn_info (DataFrame): web-scraped info from NED
+        ned_info (DataFrame): web-scraped info from NED
     """
 
-    host = ref.loc[sn, 'Host Name']
-    ra, dec = fits_info.loc[sn, 'R.A.'], fits_info.loc[sn, 'Dec.']
+    host = osc.loc[sn, 'Host Name']
+    ra, dec = sn_info.loc[sn, 'ra'], sn_info.loc[sn, 'dec']
     if verb:
         print('\n\n%s, host %s, RA %s, Dec %s' % (sn, host, ra, dec))
 
-    sn_info = pd.DataFrame([''], columns=['objname'])
+    ned_info = pd.DataFrame([''], columns=['objname'])
 
     # Finally, try searching by location; if possible, use result with similar z
     # value to OSC
-    nearest_query = query_loc(ra, dec, z=ref.loc[sn, 'z'], verb=verb)
+    nearest_query = query_loc(ra, dec, z=osc.loc[sn, 'z'], verb=verb)
     nearest_name = nearest_query['Object Name'].replace('+', '%2B')
-    sn_info = scrape_overview(nearest_name, verb=verb)
-    sn_info.loc[0,'sep'] = nearest_query['Separation']
-    if pd.notna(sn_info.loc[0,'ra']):
-        sn_info.loc[0,'offset'] = physical_offset(ra, dec, sn_info.loc[0,'ra'], 
-                sn_info.loc[0,'dec'], sn_info.loc[0,'h_dist']) # kpc
+    ned_info = scrape_overview(nearest_name, verb=verb)
+    ned_info.loc[0,'sep'] = nearest_query['Separation']
+    if pd.notna(ned_info.loc[0,'ra']):
+        ned_info.loc[0,'offset'] = physical_offset(ra, dec, ned_info.loc[0,'ra'], 
+                ned_info.loc[0,'dec'], ned_info.loc[0,'h_dist']) # kpc
 
-    sn_info.loc[0,'name'] = sn
-    sn_info.loc[0,'host'] = host
-    sn_info.loc[0,'galex_ra'] = ra
-    sn_info.loc[0,'galex_dec'] = dec
+    ned_info.loc[0,'name'] = sn
+    ned_info.loc[0,'host'] = host
+    ned_info.loc[0,'galex_ra'] = ra
+    ned_info.loc[0,'galex_dec'] = dec
 
-    return sn_info.set_index('name')
+    return ned_info.set_index('name')
 
 
 def query_name(objname, verb=0):
@@ -292,9 +297,10 @@ def get_catalogs(ned):
     return catalogs
 
 
-def to_latex(ned, sn_info):
+def combine_sn_info(ned, sn_info):
     """
-    Outputs NED scrape output and important FITS info to LaTeX table
+    Combines SNe from NED and sn_info, selecting only those with before+after
+    observations, z<0.5, physical offset < 100 kpc
     """
 
     print('Preparing NED results...')
@@ -304,28 +310,33 @@ def to_latex(ned, sn_info):
     ned = ned[ned['offset'] < 100]
     # Flag SNe with physical sep > 30 kpc
     ned.loc[ned['offset'] > 30, 'z_flag'] = 'large host offset'
+
+    # Select NED entries that exist in sn_info
+    ned_select = ned.loc[ned.index.isin(sn_info.index)]
+    # Select sn_info entries that exist in NED
+    sn_info = sn_info.loc[sn_info.index.isin(ned.index)]
+    # Concatenate
+    sn_info = pd.concat([sn_info, ned_select], axis=1, sort=True, copy=False)
+    sn_info.index.set_names('name', inplace=True)
+    # Remove duplicate column names
+    sn_info = sn_info.loc[:,~sn_info.columns.duplicated()]
+
+    return sn_info
+
+
+def to_latex(sn_info):
+    """
+    Outputs NED scrape output and important FITS info to LaTeX table
+    """
+
     # Format coordinates, redshifts & distances
-    ned['galex_coord'] = ned[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
-    ned['z_str'] = ned['z'].round(6).astype('str').replace('0+$','',regex=True)
-    ned['h_dist_str'] = ned['h_dist'].round(0).astype(int)
-    # Sort by SN name
-    ned.sort_index(inplace=True)
-    # Select SN info for relevant SNe
-    sn_info = sn_info[sn_info.index.isin(ned.index)]
-    # Remove NED info not in selection
-    ned = ned[ned.index.isin(sn_info.index)]
-    # Add epoch counts and other info from sn_info
-    ned['disc_date'] = sn_info['Disc. Date']
-    ned['epochs_total'] = sn_info['Total Epochs']
-    ned['epochs_pre'] = sn_info['Epochs Pre-SN']
-    ned['epochs_post'] = sn_info['Epochs Post-SN']
-    ned['delta_t_first'] = sn_info['First Epoch']
-    ned['delta_t_last'] = sn_info['Last Epoch']
-    ned['delta_t_next'] = sn_info['Next Epoch']
+    sn_info['galex_coord'] = sn_info[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
+    sn_info['z_str'] = sn_info['z'].round(6).astype('str').replace('0+$','',regex=True)
+    sn_info['h_dist_str'] = sn_info['h_dist'].round(0).astype(int)
     # Add notes
-    ned['notes'] = ned[['z_flag']].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
+    sn_info['notes'] = sn_info[['z_flag']].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
     # Concat references
-    ned['refs'] = ned[['z_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
+    sn_info['refs'] = sn_info[['z_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -335,7 +346,7 @@ def to_latex(ned, sn_info):
 
     if overwrite:
         print('Pulling BibTeX entries from ADS...')
-        refs = list(ned['posn_ref']) + list(ned['z_ref']) + list(ned['morph_ref'])
+        refs = list(sn_info['posn_ref']) + list(sn_info['z_ref']) + list(sn_info['morph_ref'])
         refs = list(dict.fromkeys(refs)) # remove duplicates
         bibcodes = {'bibcode':refs}
         with open('ads_token', 'r') as file:
@@ -353,8 +364,8 @@ def to_latex(ned, sn_info):
             'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
             'h_dist_str', 'a_v', 'morph', 'refs']
     # Generate table
-    ned.reset_index(inplace=True)
-    latex_table = ned.to_latex(na_rep='N/A', index=False, escape=False,
+    sn_info.reset_index(inplace=True)
+    latex_table = sn_info.to_latex(na_rep='N/A', index=False, escape=False,
         columns=columns, formatters=formatters
     )
     # Replace table header and footer with template
@@ -369,7 +380,7 @@ def to_latex(ned, sn_info):
         file.write(latex_table)
 
     # Generate short table
-    short = ned.iloc[0:20]
+    short = sn_info.iloc[0:20]
     short_table = short.to_latex(na_rep='N/A', index=False, escape=False,
         columns=columns, formatters=formatters
     )
@@ -377,13 +388,8 @@ def to_latex(ned, sn_info):
     with open(SHORT_TABLE_FILE, 'w') as file:
         file.write(short_table)
 
-    # Output combined CSV
-    columns += ['notes', 'z_ref', 'morph_ref']
-    columns -= ['refs']
-    utils.output_csv(ned[columns], 'out/combined.csv', index=False)
-
     # Catalog bibcodes (NED has a weird format)
-    get_catalogs(ned)
+    get_catalogs(sn_info)
 
 
 def table_ref(bibcodes):
@@ -395,20 +401,6 @@ def table_ref(bibcodes):
     bibcodes = bibcodes.replace(';nan', '').split(';')
     bibcodes = list(dict.fromkeys(bibcodes)) # remove duplicates
     return '\citet{%s}' % ','.join([b.replace('A&A', 'AandA') for b in bibcodes])
-
-
-def compress_duplicates(fits_info):
-    duplicated = fits_info.groupby(['R.A.', 'Dec.'])
-    fits_info['Total Epochs'] = duplicated['Total Epochs'].transform('sum')
-    fits_info['Epochs Pre-SN'] = duplicated['Epochs Pre-SN'].transform('sum')
-    fits_info['Epochs Post-SN'] = duplicated['Epochs Post-SN'].transform('sum')
-    fits_info['First Epoch'] = duplicated['First Epoch'].transform('max')
-    fits_info['Last Epoch'] = duplicated['Last Epoch'].transform('max')
-    fits_info['Next Epoch'] = duplicated['Next Epoch'].transform('min')
-    fits_info.drop(['Band', 'File'], axis=1, inplace=True)
-    fits_info.drop_duplicates(inplace=True)
-    utils.output_csv(fits_info, 'out/sninfo.csv')
-    return fits_info
 
 
 if __name__ == '__main__':

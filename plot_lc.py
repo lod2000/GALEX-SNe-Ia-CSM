@@ -21,12 +21,17 @@ def main():
     osc = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
     ned = pd.read_csv('out/scraped_table.csv', index_col='name')
 
+    # Initialize output DataFrames
     flagged_points = []    
     total_points = 0
-
+    detections = []
     bg_list = []
     bg_loc = []
 
+    # Data flags are in binary
+    flags = [int(2 ** n) for n in range(0,10)]
+
+    print('Plotting light curves...')
     for sn in tqdm(sn_info.index[0:1]):
         sn = 'SN2007on'
 
@@ -55,13 +60,27 @@ def main():
             # Add systematic error in quadrature with statistical
             lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err ** 2)
 
-            # Background average of epochs before before
+            # Detect points above background error
+            lc_det = lc[lc['luminosity'] > bg + bg_err]
+            n_det = len(lc_det.index)
+            lc_det.insert(0, 'name', np.array([sn] * n_det))
+            lc_det.insert(1, 'band', np.array([band] * n_det))
+            detections.append(lc_det)
+
+            # Count number of data points with each flag
+            flag_count = [len(lc[lc['flags'] & f > 0]) for f in flags]
+            flagged_points.append(flag_count)
+            # Count total data points
+            total_points += len(lc)
+
+            # Plot background average of epochs before before
             ax.axhline(y=bg_err, alpha=0.8, color=color, label=band+' host background')
 
-            # Convert negative luminosities into upper limits
+            # Convert negative luminosities into upper limits and plot
             lc_lims = lc[lc['luminosity'] < 0]
-            ax.scatter(lc_lims['t_delta'], 3 * lc_lims['luminosity_err'] - bg, 
-                    marker='v', color=color, label=band+' 3σ limit')
+            sigma = 3
+            ax.scatter(lc_lims['t_delta'], sigma * lc_lims['luminosity_err'] - bg, 
+                    marker='v', color=color, label='%s %sσ limit' % (band, sigma))
 
             # Plot luminosities
             lc_data = lc[lc['luminosity'] > 0]
@@ -79,72 +98,43 @@ def main():
         plt.legend()
         fig.suptitle(sn)
         plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
-        plt.show()
+        # plt.show()
+        plt.close()
 
     # Output DataFrame of background, bg error, and sys error
+    # Right now outputs luminosity; may want to change to flux later
     bg_midx = pd.MultiIndex.from_tuples(bg_loc, names=['Name', 'Band'])
     bg_df = pd.DataFrame(bg_list, columns=['Background', 'Background Error', 
             'Systematic Error'], index=bg_midx)
     utils.output_csv(bg_df, 'out/lc_backgrounds.csv')
 
-    #     if len(nuv_lc) > 0:
-    #         nuv_bg, nuv_bg_err, nuv_sys_err = get_background(nuv_lc, disc_date)
-    #         sys_err.loc[sn, 'NUV Background'] = nuv_bg
-    #         sys_err.loc[sn, 'NUV Systematic Error'] = nuv_sys_err
-    #         nuv_lc['luminosity_err'] = np.sqrt(nuv_lc['luminosity_err'] ** 2 + nuv_sys_err ** 2)
-    #         flags.append(nuv_lc[nuv_lc['luminosity'] > nuv_bg + nuv_bg_err])
-    #     if len(fuv_lc) > 0:
-    #         fuv_bg, fuv_bg_err, fuv_sys_err = get_background(fuv_lc, disc_date)
-    #         sys_err.loc[sn, 'FUV Background'] = fuv_bg
-    #         sys_err.loc[sn, 'FUV Systematic Error'] = fuv_sys_err
-    #         fuv_lc['luminosity_err'] = np.sqrt(fuv_lc['luminosity_err'] ** 2 + fuv_sys_err ** 2)
-    #         flags.append(fuv_lc[fuv_lc['luminosity'] > fuv_bg + fuv_bg_err])
+    # Output possible detections
+    detections = pd.concat(detections)
+    detections.reset_index(inplace=True)
+    utils.output_csv(detections, 'out/detections.csv', index=False)
 
-    # flags = pd.concat(flags)
-    # flags.to_csv('out/notable.csv')
-    # sys_err.to_csv('out/sys_err.csv')
-
-
-def count_flags(lc):
-    """
-    Counts the number of points labeled with each flag in a particular light curve
-    Also, fix lc files with duplicated information
-    Input:
-        lc (DataFrame): light curve table
-    Output:
-        flag_counts (Series): number of data points by flag label
-    """
-
-    flags = [int(2 ** n) for n in range(0,10)]
-    lc_files = str(LC_DIR) + '/' + fits_info['File'].str.split('.', expand=True)[0] + '.csv'
-    lc_files = lc_files.apply(Path)
-    low_exptime = []
-
-    print('Reading light curve files...')
-    for lc_file in tqdm(lc_files):
-
-        # Count points with only flag 4
-        low_exptime += lc[lc['flags'] == 4]['exptime'].tolist()
-
-        # Count total data points
-        total_points += len(lc)
-        # Count number of data points with each flag
-        flag_count = [len(lc[lc['flags'] & f > 0]) for f in flags]
-        flagged_points.append(flag_count)
-
-    flagged_points = pd.DataFrame(flagged_points, index=lc_files, columns=flags, dtype=int)
+    # Output flag info
+    flagged_points = pd.DataFrame(flagged_points, index=bg_midx, columns=flags, dtype=int)
     utils.output_csv(flagged_points, 'out/flagged_points.csv')
     print('Flag counts:')
     print(flagged_points.sum(0))
     print('Flag count fraction:')
     print(flagged_points.sum(0) / total_points)
     print('Total data points: %s' % total_points)
-    print('Points with low exptime: mean %s, std %s, count %s' % (np.mean(low_exptime), np.std(low_exptime), len(low_exptime)))
-
-    return flagged_points.sum(0)
 
 
 def get_background(lc):
+    """
+    Calculates the host background for a given light curve. Also calculates the
+    systematic error needed to make the reduced chi squared value of the total
+    error equal to 1.
+    Inputs:
+        lc (DataFrame): light curve table
+    Outputs:
+        bg (float): host background luminosity
+        bg_err (float): host background luminosity error
+        sys_err (float): systematic error based on reduced chi-squared test
+    """
 
     before = lc[lc['t_delta'] < -50]
     data = np.array(before['luminosity'])

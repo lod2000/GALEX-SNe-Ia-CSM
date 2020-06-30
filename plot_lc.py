@@ -35,7 +35,6 @@ def main():
         # Initialize plot
         fig, ax = plt.subplots()
         xlim = (-50, 1000)
-        disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
 
         bands = ['FUV', 'NUV']
         colors = ['purple', 'blue']
@@ -45,8 +44,12 @@ def main():
         for band, color, marker in zip(bands, colors, marker_styles):
             # Import light curve file, if it exists
             try:
-                lc = get_lc_data(sn, band, sn_info)
+                lc, flag_count = get_lc_data(sn, band, sn_info)
             except FileNotFoundError:
+                continue
+
+            # Skip if no useful data points found
+            if len(lc.index) == 0:
                 continue
 
             # Get host background levels & errors
@@ -56,6 +59,7 @@ def main():
 
             # Add systematic error in quadrature with statistical
             lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err ** 2)
+            lc['luminosity_hostsub'] = lc['luminosity'] - bg
 
             # Detect points above background error
             lc_det = lc[lc['luminosity'] > bg + bg_err]
@@ -65,7 +69,6 @@ def main():
             detections.append(lc_det)
 
             # Count number of data points with each flag
-            flag_count = [len(lc[lc['flags'] & f > 0]) for f in flags]
             flagged_points.append(flag_count)
             # Count total data points
             total_points += len(lc)
@@ -92,7 +95,7 @@ def main():
             ax.set_xlabel('Time since discovery [days]')
             ax.set_xlim(xlim)
             ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
-            ax.set_ylim(0, None)
+            # ax.set_ylim(0, None)
             plt.legend()
             fig.suptitle(sn)
             plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
@@ -156,8 +159,8 @@ def get_background(lc):
             bg_err = np.sqrt(np.sum(new_err ** 2))
     else:
         # TODO improve sys error estimate (from gPhoton)
-        bg = lc.iloc[0]['luminosity']
-        bg_err = lc.iloc[0]['luminosity_err']
+        bg = lc.reset_index(drop=True).loc[0,'luminosity']
+        bg_err = lc.reset_index(drop=True).loc[0,'luminosity_err']
         sys_err = np.nan
 
     return bg, bg_err, sys_err
@@ -194,13 +197,18 @@ def get_lc_data(sn, band, sn_info):
     lc['flags'] = lc['flags'].astype(int)
 
     # Weed out bad flags
-    bad_flags = (1 | 2 | 16 | 64 | 128 | 512)
-    lc = lc[lc['flags'] & bad_flags == 0]
+    flags = [int(2 ** n) for n in range(0,10)]
+    flag_count = [len(lc[lc['flags'] & f > 0]) for f in flags]
+    fatal_flags = (1 | 2 | 4 | 16 | 64 | 128 | 512)
+    lc = lc[lc['flags'] & fatal_flags == 0]
 
     # Cut sources outside detector radius
     plate_scale = 6 # as/pixel
     detrad_cut_px = DETRAD_CUT * 3600 / plate_scale
     lc = lc[lc['detrad'] < detrad_cut_px]
+
+    # Cut ridiculous flux values
+    lc = lc[np.abs(lc['flux_bgsub']) < 1]
 
     # Convert dates to MJD
     lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
@@ -209,7 +217,7 @@ def get_lc_data(sn, band, sn_info):
     lc['luminosity'] = absolute_luminosity(sn, lc['flux_bgsub'], sn_info)
     lc['luminosity_err'] = absolute_luminosity(sn, lc['flux_bgsub_err'], sn_info)
 
-    return lc
+    return lc, flag_count
 
 
 def absolute_mag(sn, mags, sn_info):

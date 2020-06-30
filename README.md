@@ -38,3 +38,8 @@
 
 * Clean up OSC csv
 * Plot filter response curves for GALEX, Swift UV, HST UV
+
+## Reference files
+
+* fits_info: sn, band, and epochs for each FITS file provided
+* sn_info: all necessary info about SN sample we want to use (before+after, z<0.5, etc.)

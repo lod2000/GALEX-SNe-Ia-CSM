@@ -47,9 +47,9 @@ def main():
     fits_files = utils.get_fits_files(args.fits_dir, osc)
     # Import all FITS files
     fits_info = compile_fits(fits_files, osc)
+    utils.output_csv(fits_info, FITS_INFO_FILE)
     # Select only those with before+after observations
     final_sample = get_final_sample(fits_info) 
-    utils.output_csv(final_sample, FITS_INFO_FILE)
 
     # Output compressed CSV without SN name duplicates
     sn_info = compress_duplicates(final_sample.copy())

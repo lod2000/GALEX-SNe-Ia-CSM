@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 LC_DIR = Path('/mnt/d/GALEXdata_v6/LCs/')
 FITS_DIR = Path('/mnt/d/GALEXdata_v6/fits/')
+DETRAD_CUT = 0.55 # deg
 
 
 def main():
@@ -20,19 +21,71 @@ def main():
     osc = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
     ned = pd.read_csv('out/scraped_table.csv', index_col='name')
 
-    flag_counts = count_flags(fits_info)
+    flagged_points = []    
+    total_points = 0
 
-    # flags = []
-    # sys_err = pd.DataFrame([], columns=['NUV Background', 'NUV Systematic Error', 'FUV Background', 'FUV Systematic Error'], 
-    #         index=pd.Series(sne, name='Name'))
+    bg_list = []
+    bg_loc = []
 
-    # for sn in tqdm(sn_info.index[0:1]):
-    #     disc_date = Time(osc.loc[sn, 'Disc. Date'], format='iso')
+    for sn in tqdm(sn_info.index[0:1]):
+        sn = 'SN2007on'
 
-    #     nuv_lc = get_lc_data(sn, 'NUV', disc_date, ned)
-    #     fuv_lc = get_lc_data(sn, 'FUV', disc_date, ned)
+        # Initialize plot
+        fig, ax = plt.subplots()
+        xlim = (-50, 1000)
+        disc_date = Time(sn_info.loc[sn, 'Disc. Date'], format='iso')
 
-    #     nuv_bg = nuv_bg_err = fuv_bg = fuv_bg_err = None
+        bands = ['FUV', 'NUV']
+        colors = ['purple', 'blue']
+        marker_styles = ['D', 'o']
+
+        # Show FUV and NUV data on same plot
+        for band, color, marker in zip(bands, colors, marker_styles):
+            # Import light curve file, if it exists
+            try:
+                lc = get_lc_data(sn, band, sn_info, ned)
+            except FileNotFoundError:
+                continue
+
+            # Get host background levels & errors
+            bg, bg_err, sys_err = get_background(lc)
+            bg_list.append([bg, bg_err, sys_err])
+            bg_loc.append((sn, band))
+
+            # Add systematic error in quadrature with statistical
+            lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err ** 2)
+
+            # Background average of epochs before before
+            ax.axhline(y=bg_err, alpha=0.8, color=color, label=band+' host background')
+
+            # Convert negative luminosities into upper limits
+            lc_lims = lc[lc['luminosity'] < 0]
+            ax.scatter(lc_lims['t_delta'], 3 * lc_lims['luminosity_err'] - bg, 
+                    marker='v', color=color, label=band+' 3σ limit')
+
+            # Plot luminosities
+            lc_data = lc[lc['luminosity'] > 0]
+            markers, caps, bars = ax.errorbar(lc_data['t_delta'], lc_data['luminosity'] - bg, 
+                    yerr=lc_data['luminosity_err'], linestyle='none', marker=marker, ms=4,
+                    elinewidth=1, c=color, label=band
+            )
+            [bar.set_alpha(0.8) for bar in bars]
+
+        # Configure plot
+        ax.set_xlabel('Time since discovery [days]')
+        ax.set_xlim(xlim)
+        ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
+        ax.set_ylim(0, None)
+        plt.legend()
+        fig.suptitle(sn)
+        plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
+        plt.show()
+
+    # Output DataFrame of background, bg error, and sys error
+    bg_midx = pd.MultiIndex.from_tuples(bg_loc, names=['Name', 'Band'])
+    bg_df = pd.DataFrame(bg_list, columns=['Background', 'Background Error', 
+            'Systematic Error'], index=bg_midx)
+    utils.output_csv(bg_df, 'out/lc_backgrounds.csv')
 
     #     if len(nuv_lc) > 0:
     #         nuv_bg, nuv_bg_err, nuv_sys_err = get_background(nuv_lc, disc_date)
@@ -47,19 +100,17 @@ def main():
     #         fuv_lc['luminosity_err'] = np.sqrt(fuv_lc['luminosity_err'] ** 2 + fuv_sys_err ** 2)
     #         flags.append(fuv_lc[fuv_lc['luminosity'] > fuv_bg + fuv_bg_err])
 
-    #     plot_lc(nuv_lc, fuv_lc, sn, disc_date, nuv_bg, nuv_bg_err, fuv_bg, fuv_bg_err)
-
     # flags = pd.concat(flags)
     # flags.to_csv('out/notable.csv')
     # sys_err.to_csv('out/sys_err.csv')
 
 
-def count_flags(fits_info):
+def count_flags(lc):
     """
-    Counts the number of points labeled with each flag for all light curves.
+    Counts the number of points labeled with each flag in a particular light curve
     Also, fix lc files with duplicated information
     Input:
-        fits_info (DataFrame): info about all before+after FITS files
+        lc (DataFrame): light curve table
     Output:
         flag_counts (Series): number of data points by flag label
     """
@@ -67,31 +118,10 @@ def count_flags(fits_info):
     flags = [int(2 ** n) for n in range(0,10)]
     lc_files = str(LC_DIR) + '/' + fits_info['File'].str.split('.', expand=True)[0] + '.csv'
     lc_files = lc_files.apply(Path)
-    flagged_points = []
     low_exptime = []
-    total_points = 0
 
     print('Reading light curve files...')
     for lc_file in tqdm(lc_files):
-        # Read light curve file, unless it doesn't exist yet
-        try:
-            lc = pd.read_csv(lc_file)
-        except FileNotFoundError:
-            flagged_points.append(np.full(10, np.nan))
-            continue
-
-        # Find duplicated headers, if any, and remove all duplicated material
-        # then fix original file
-        dup_header = lc[lc['t0'] == 't0']
-        if len(dup_header) > 0:
-            lc = lc.iloc[0:dup_header.index[0]]
-            lc.to_csv(lc_file, index=False)
-
-        # Cut sources outside detector radius
-        plate_scale = 6 # as/pixel
-        detrad_cut = 0.55 # deg
-        detrad_cut_px = detrad_cut * 3600 / plate_scale
-        lc = lc[lc['detrad'] < detrad_cut_px]
 
         # Count points with only flag 4
         low_exptime += lc[lc['flags'] == 4]['exptime'].tolist()
@@ -99,7 +129,6 @@ def count_flags(fits_info):
         # Count total data points
         total_points += len(lc)
         # Count number of data points with each flag
-        lc['flags'] = lc['flags'].astype(float).astype(int)
         flag_count = [len(lc[lc['flags'] & f > 0]) for f in flags]
         flagged_points.append(flag_count)
 
@@ -115,7 +144,7 @@ def count_flags(fits_info):
     return flagged_points.sum(0)
 
 
-def get_background(lc, disc_date):
+def get_background(lc):
 
     before = lc[lc['t_delta'] < -50]
     data = np.array(before['luminosity'])
@@ -143,87 +172,54 @@ def get_background(lc, disc_date):
     return bg, bg_err, sys_err
 
 
-def get_lc_data(sn, band, disc_date, ned):
+def get_lc_data(sn, band, sn_info, ned):
+    """
+    Imports light curve file for specified SN and band. Cuts points with bad
+    flags or sources outside detector radius, and also fixes duplicated headers.
+    Inputs:
+        sn (str): SN name
+        band (str): 'FUV' or 'NUV'
+        sn_info (DataFrame)
+        ned (DataFrame)
+    Output:
+        lc (DataFrame): light curve table
+    """
 
     # Get name of light curve file
     fits_name = utils.sn2fits(sn, band)
     lc_file = LC_DIR / Path(fits_name.split('.')[0] + '.csv')
+    # Discovery date
+    disc_date = Time(sn_info.loc[sn, 'Disc. Date'], format='iso')
 
     # Read light curve data
-    try:
-        lc = pd.read_csv(lc_file, dtype={'flags':int})
+    lc = pd.read_csv(lc_file)
 
-        # Weed out bad flags
-        bad_flags = (1 | 2 | 16 | 64 | 128 | 512)
-        lc = lc[lc['flags'] & bad_flags == 0]
+    # Find duplicated headers, if any, and remove all duplicated material
+    # then fix original file
+    dup_header = lc[lc['t0'] == 't0']
+    if len(dup_header) > 0:
+        lc = lc.iloc[0:dup_header.index[0]]
+        lc.to_csv(lc_file, index=False)
+    lc = lc.astype(float)
+    lc['flags'] = lc['flags'].astype(int)
 
-        # Convert dates to MJD
-        lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
-        lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
-        # Convert measured fluxes to absolute luminosities
-        lc['luminosity'] = absolute_luminosity(sn, lc['flux_bgsub'], ned)
-        lc['luminosity_err'] = absolute_luminosity(sn, lc['flux_bgsub_err'], ned)
+    # Weed out bad flags
+    bad_flags = (1 | 2 | 16 | 64 | 128 | 512)
+    lc = lc[lc['flags'] & bad_flags == 0]
 
-        return lc
-    except FileNotFoundError:
-        return []
+    # Cut sources outside detector radius
+    plate_scale = 6 # as/pixel
+    detrad_cut_px = DETRAD_CUT * 3600 / plate_scale
+    lc = lc[lc['detrad'] < detrad_cut_px]
 
+    # Convert dates to MJD
+    lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
+    lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
+    # Convert measured fluxes to absolute luminosities
+    lc['luminosity'] = absolute_luminosity(sn, lc['flux_bgsub'], ned)
+    lc['luminosity_err'] = absolute_luminosity(sn, lc['flux_bgsub_err'], ned)
 
-def plot_lc(nuv_lc, fuv_lc, sn, disc_date, nuv_bg=None, nuv_bg_err=None, fuv_bg=None, fuv_bg_err=None):
-
-    fig, ax = plt.subplots()
-
-    xlim = (-50, 1000)
-
-    # Background median of epochs before or long after discovery
-    # ax.hlines(bg, xlim[0], xlim[1], colors=['grey'], label='Background median')
-    if nuv_bg:
-        ax.fill_between(np.arange(xlim[0], xlim[1]), 0, nuv_bg_err, 
-                alpha=0.5, color='blue', label='NUV host background')
-    if fuv_bg:
-        ax.fill_between(np.arange(xlim[0], xlim[1]), 0, fuv_bg_err, 
-                alpha=0.5, color='purple', label='FUV host background')
-    # ax.fill_between(lc['t_mean_mjd'], med - 2 * med_err, med + 2 * med_err, 
-    #         alpha=0.2, color='grey', label='Background 2σ')
-
-    # Convert negative luminosities into upper limits
-    if len(nuv_lc) > 0:
-        nuv_lims = nuv_lc[nuv_lc['luminosity'] < 0]
-        nuv_lc = nuv_lc[nuv_lc['luminosity'] > 0]
-        # NUV fluxes
-        markers, caps, bars = ax.errorbar(nuv_lc['t_delta'], nuv_lc['luminosity'] - nuv_bg, 
-                yerr=nuv_lc['luminosity_err'], linestyle='none', marker='o', ms=4,
-                elinewidth=1, c='blue', label='NUV'
-        )
-        [bar.set_alpha(0.8) for bar in bars]
-        # NUV upper limits
-        ax.scatter(nuv_lims['t_delta'], 3 * nuv_lims['luminosity_err'] - nuv_bg, 
-                marker='v', color='blue', label='NUV 3σ limit')
-
-    # Convert negative luminosities into upper limits
-    if len(fuv_lc) > 0:
-        fuv_lims = fuv_lc[fuv_lc['luminosity'] < 0]
-        fuv_lc = fuv_lc[fuv_lc['luminosity'] > 0]
-        # FUV fluxes
-        markers, caps, bars = ax.errorbar(fuv_lc['t_delta'], fuv_lc['luminosity'] - fuv_bg, 
-                yerr=fuv_lc['luminosity_err'], linestyle='none', marker='D', ms=4,
-                elinewidth=1, c='purple', label='FUV'
-        )
-        [bar.set_alpha(0.8) for bar in bars]
-        # FUV upper limits
-        ax.scatter(fuv_lims['t_delta'], 3 * fuv_lims['luminosity_err'] - fuv_bg, 
-                marker='v', color='purple', label='FUV 3σ limit')
-
-    # Configure plot
-    # plt.gca().invert_yaxis()
-    ax.set_xlabel('Time since discovery [days]')
-    ax.set_xlim(xlim)
-    ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
-    plt.legend()
-    fig.suptitle(sn)
-    # plt.show()
-    plt.savefig('lc_plots/' + sn + '.png')
-    plt.close()
+    return lc
 
 
 def absolute_mag(sn, mags, ned):

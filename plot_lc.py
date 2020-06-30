@@ -9,48 +9,110 @@ import utils
 from scipy import stats
 from tqdm import tqdm
 
-LC_DIR = Path('/mnt/d/GALEXdata_v5/LCs/')
-FITS_DIR = Path('/mnt/d/GALEXdata_v5/fits/')
+LC_DIR = Path('/mnt/d/GALEXdata_v6/LCs/')
+FITS_DIR = Path('/mnt/d/GALEXdata_v6/fits/')
 
 
 def main():
 
     fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
-    sne = fits_info.index.drop_duplicates()
-    ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
+    sn_info = pd.read_csv('out/sninfo.csv', index_col='Name')
+    osc = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
     ned = pd.read_csv('out/scraped_table.csv', index_col='name')
 
-    flags = []
-    sys_err = pd.DataFrame([], columns=['NUV Background', 'NUV Systematic Error', 'FUV Background', 'FUV Systematic Error'], 
-            index=pd.Series(sne, name='Name'))
+    flag_counts = count_flags(fits_info)
 
-    for sn in tqdm(sne[0:1]):
-        sn = 'SN2007on'
-        disc_date = Time(ref.loc[sn, 'Disc. Date'], format='iso')
+    # flags = []
+    # sys_err = pd.DataFrame([], columns=['NUV Background', 'NUV Systematic Error', 'FUV Background', 'FUV Systematic Error'], 
+    #         index=pd.Series(sne, name='Name'))
 
-        nuv_lc = get_lc_data(sn, 'NUV', disc_date, ned)
-        fuv_lc = get_lc_data(sn, 'FUV', disc_date, ned)
+    # for sn in tqdm(sn_info.index[0:1]):
+    #     disc_date = Time(osc.loc[sn, 'Disc. Date'], format='iso')
 
-        nuv_bg = nuv_bg_err = fuv_bg = fuv_bg_err = None
+    #     nuv_lc = get_lc_data(sn, 'NUV', disc_date, ned)
+    #     fuv_lc = get_lc_data(sn, 'FUV', disc_date, ned)
 
-        if len(nuv_lc) > 0:
-            nuv_bg, nuv_bg_err, nuv_sys_err = get_background(nuv_lc, disc_date)
-            sys_err.loc[sn, 'NUV Background'] = nuv_bg
-            sys_err.loc[sn, 'NUV Systematic Error'] = nuv_sys_err
-            nuv_lc['luminosity_err'] = np.sqrt(nuv_lc['luminosity_err'] ** 2 + nuv_sys_err ** 2)
-            flags.append(nuv_lc[nuv_lc['luminosity'] > nuv_bg + nuv_bg_err])
-        if len(fuv_lc) > 0:
-            fuv_bg, fuv_bg_err, fuv_sys_err = get_background(fuv_lc, disc_date)
-            sys_err.loc[sn, 'FUV Background'] = fuv_bg
-            sys_err.loc[sn, 'FUV Systematic Error'] = fuv_sys_err
-            fuv_lc['luminosity_err'] = np.sqrt(fuv_lc['luminosity_err'] ** 2 + fuv_sys_err ** 2)
-            flags.append(fuv_lc[fuv_lc['luminosity'] > fuv_bg + fuv_bg_err])
+    #     nuv_bg = nuv_bg_err = fuv_bg = fuv_bg_err = None
 
-        plot_lc(nuv_lc, fuv_lc, sn, disc_date, nuv_bg, nuv_bg_err, fuv_bg, fuv_bg_err)
+    #     if len(nuv_lc) > 0:
+    #         nuv_bg, nuv_bg_err, nuv_sys_err = get_background(nuv_lc, disc_date)
+    #         sys_err.loc[sn, 'NUV Background'] = nuv_bg
+    #         sys_err.loc[sn, 'NUV Systematic Error'] = nuv_sys_err
+    #         nuv_lc['luminosity_err'] = np.sqrt(nuv_lc['luminosity_err'] ** 2 + nuv_sys_err ** 2)
+    #         flags.append(nuv_lc[nuv_lc['luminosity'] > nuv_bg + nuv_bg_err])
+    #     if len(fuv_lc) > 0:
+    #         fuv_bg, fuv_bg_err, fuv_sys_err = get_background(fuv_lc, disc_date)
+    #         sys_err.loc[sn, 'FUV Background'] = fuv_bg
+    #         sys_err.loc[sn, 'FUV Systematic Error'] = fuv_sys_err
+    #         fuv_lc['luminosity_err'] = np.sqrt(fuv_lc['luminosity_err'] ** 2 + fuv_sys_err ** 2)
+    #         flags.append(fuv_lc[fuv_lc['luminosity'] > fuv_bg + fuv_bg_err])
 
-    flags = pd.concat(flags)
-    flags.to_csv('out/notable.csv')
-    sys_err.to_csv('out/sys_err.csv')
+    #     plot_lc(nuv_lc, fuv_lc, sn, disc_date, nuv_bg, nuv_bg_err, fuv_bg, fuv_bg_err)
+
+    # flags = pd.concat(flags)
+    # flags.to_csv('out/notable.csv')
+    # sys_err.to_csv('out/sys_err.csv')
+
+
+def count_flags(fits_info):
+    """
+    Counts the number of points labeled with each flag for all light curves.
+    Also, fix lc files with duplicated information
+    Input:
+        fits_info (DataFrame): info about all before+after FITS files
+    Output:
+        flag_counts (Series): number of data points by flag label
+    """
+
+    flags = [int(2 ** n) for n in range(0,10)]
+    lc_files = str(LC_DIR) + '/' + fits_info['File'].str.split('.', expand=True)[0] + '.csv'
+    lc_files = lc_files.apply(Path)
+    flagged_points = []
+    low_exptime = []
+    total_points = 0
+
+    print('Reading light curve files...')
+    for lc_file in tqdm(lc_files):
+        # Read light curve file, unless it doesn't exist yet
+        try:
+            lc = pd.read_csv(lc_file)
+        except FileNotFoundError:
+            flagged_points.append(np.full(10, np.nan))
+            continue
+
+        # Find duplicated headers, if any, and remove all duplicated material
+        # then fix original file
+        dup_header = lc[lc['t0'] == 't0']
+        if len(dup_header) > 0:
+            lc = lc.iloc[0:dup_header.index[0]]
+            lc.to_csv(lc_file, index=False)
+
+        # Cut sources outside detector radius
+        plate_scale = 6 # as/pixel
+        detrad_cut = 0.55 # deg
+        detrad_cut_px = detrad_cut * 3600 / plate_scale
+        lc = lc[lc['detrad'] < detrad_cut_px]
+
+        # Count points with only flag 4
+        low_exptime += lc[lc['flags'] == 4]['exptime'].tolist()
+
+        # Count total data points
+        total_points += len(lc)
+        # Count number of data points with each flag
+        lc['flags'] = lc['flags'].astype(float).astype(int)
+        flag_count = [len(lc[lc['flags'] & f > 0]) for f in flags]
+        flagged_points.append(flag_count)
+
+    flagged_points = pd.DataFrame(flagged_points, index=lc_files, columns=flags, dtype=int)
+    utils.output_csv(flagged_points, 'out/flagged_points.csv')
+    print('Flag counts:')
+    print(flagged_points.sum(0))
+    print('Flag count fraction:')
+    print(flagged_points.sum(0) / total_points)
+    print('Total data points: %s' % total_points)
+    print('Points with low exptime: mean %s, std %s, count %s' % (np.mean(low_exptime), np.std(low_exptime), len(low_exptime)))
+
+    return flagged_points.sum(0)
 
 
 def get_background(lc, disc_date):

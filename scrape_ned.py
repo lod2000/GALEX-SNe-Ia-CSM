@@ -14,6 +14,7 @@ from astropy import units as u
 from pathlib import Path
 from time import sleep
 import matplotlib.pyplot as plt
+import utils
 
 C = 3.e5 # km/s
 H_0 = 70. # km/s/Mpc
@@ -24,17 +25,17 @@ CORR_Z = 1
 QUERY_RADIUS = 5. # arcmin
 BLOCK_SIZE = 10
 NED_RESULTS_FILE = Path('out/scraped_table.csv')
-NED_RESULTS_FILE_TMP = Path('out/scraped_table-tmp.csv')
-BIB_FILE = Path('out/table_references.bib')
+BIB_FILE = Path('bib/table_references.bib')
+CAT_FILE = Path('bib/catalog_codes.txt')
 LATEX_TABLE_TEMPLATE = Path('ref/deluxetable_template.tex')
 LATEX_TABLE_FILE = Path('out/table.tex')
+SHORT_TABLE_FILE = Path('out/short_table.tex')
 
 
 def main():
 
-    fits_info = pd.read_csv('out/fitsinfo.csv')
-    fits_no_dup = fits_info.drop_duplicates('Name').set_index('Name')
-    fits_info.set_index('Name', inplace=True)
+    fits_info = pd.read_csv('out/fitsinfo.csv', index_col='Name')
+    sn_info = compress_duplicates(fits_info)
     ref = pd.read_csv('ref/OSC-pre2014-v2-clean.csv', index_col='Name')
 
     prev = 'o'
@@ -44,11 +45,11 @@ def main():
     # Overwrite completely
     if prev == 'o':
         ned = pd.DataFrame()
-        sne = np.array(fits_no_dup.index)
+        sne = np.array(sn_info.index)
     # Continue from previous output
     elif prev == 'c':
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
-        sne = np.array([row.name for i, row in fits_no_dup.iterrows() if row.name not in ned.index])
+        sne = np.array([row.name for i, row in sn_info.iterrows() if row.name not in ned.index])
     # Keep previous output
     else:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
@@ -57,16 +58,12 @@ def main():
     blocks = np.arange(0, len(sne), BLOCK_SIZE)
     for b in tqdm(blocks):
         sample = sne[b:min(b+BLOCK_SIZE, len(sne))]
-        block = pd.concat([get_sn(sn, fits_no_dup, ref, verb=0) for sn in sample])
+        block = pd.concat([get_sn(sn, sn_info, ref, verb=0) for sn in sample])
         ned = pd.concat([ned, block])
-        try:
-            ned.to_csv(NED_RESULTS_FILE)
-        except PermissionError:
-            ned.to_csv(NED_RESULTS_FILE_TMP)
+        utils.output_csv(ned, NED_RESULTS_FILE)
 
     #plot_redshifts(ned)
-    #print(get_catalogs(ned))
-    to_latex(ned, fits_info)
+    to_latex(ned, sn_info)
 
 
 def get_sn(sn, fits_info, ref, verb=0):
@@ -289,10 +286,13 @@ def get_catalogs(ned):
     for col in ref_cols:
         catalogs += list(ned[ned['posn_ref'].str.contains(':')]['posn_ref'])
     catalogs = list(dict.fromkeys(catalogs))
+    catalog_str = '\n'.join(catalogs)
+    with open(CAT_FILE, 'w') as file:
+        file.write(catalog_str)
     return catalogs
 
 
-def to_latex(ned, fits_info):
+def to_latex(ned, sn_info):
     """
     Outputs NED scrape output and important FITS info to LaTeX table
     """
@@ -307,13 +307,25 @@ def to_latex(ned, fits_info):
     # Format coordinates, redshifts & distances
     ned['galex_coord'] = ned[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
     ned['z_str'] = ned['z'].round(6).astype('str').replace('0+$','',regex=True)
-    ned['h_dist_str'] = ned['h_dist'].round().astype('str').replace('.','')
+    ned['h_dist_str'] = ned['h_dist'].round(0).astype(int)
     # Sort by SN name
     ned.sort_index(inplace=True)
-    ned.reset_index(inplace=True)
-    # Add epoch counts
-    # ned['epochs_total'] = np.sum(fits_info.loc[ned['name'], 'Total Epochs'])
-    # print(ned['epochs_total'])
+    # Select SN info for relevant SNe
+    sn_info = sn_info[sn_info.index.isin(ned.index)]
+    # Remove NED info not in selection
+    ned = ned[ned.index.isin(sn_info.index)]
+    # Add epoch counts and other info from sn_info
+    ned['disc_date'] = sn_info['Disc. Date']
+    ned['epochs_total'] = sn_info['Total Epochs']
+    ned['epochs_pre'] = sn_info['Epochs Pre-SN']
+    ned['epochs_post'] = sn_info['Epochs Post-SN']
+    ned['delta_t_first'] = sn_info['First Epoch']
+    ned['delta_t_last'] = sn_info['Last Epoch']
+    ned['delta_t_next'] = sn_info['Next Epoch']
+    # Add notes
+    ned['notes'] = ned[['z_flag']].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
+    # Concat references
+    ned['refs'] = ned[['z_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -336,11 +348,14 @@ def to_latex(ned, fits_info):
 
     print('Writing to LaTeX table...')
     # Format reference bibcodes
-    formatters = {'posn_ref':table_ref, 'z_ref':table_ref, 'morph_ref':table_ref}
-    # Generate table with bare minimum data
+    formatters = {'refs':table_ref}
+    columns = ['name', 'disc_date', 'galex_coord', 'epochs_total', 
+            'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
+            'h_dist_str', 'a_v', 'morph', 'refs']
+    # Generate table
+    ned.reset_index(inplace=True)
     latex_table = ned.to_latex(na_rep='N/A', index=False, escape=False,
-        columns=['name', 'galex_coord', 'z_str', 'h_dist_str', 'z_ref'],
-        formatters=formatters
+        columns=columns, formatters=formatters
     )
     # Replace table header and footer with template
     # Edit this file if you need to change the number of columns or description
@@ -348,18 +363,52 @@ def to_latex(ned, fits_info):
         dt_file = file.read()
         header = dt_file.split('===')[0]
         footer = dt_file.split('===')[1]
-    latex_table = latex_table.split('\n')[4:-3]
-    latex_table = header + '\n'.join(latex_table) + footer
+    latex_table = header + '\n'.join(latex_table.split('\n')[4:-3]) + footer
     # Write table
     with open(LATEX_TABLE_FILE, 'w') as file:
         file.write(latex_table)
 
+    # Generate short table
+    short = ned.iloc[0:20]
+    short_table = short.to_latex(na_rep='N/A', index=False, escape=False,
+        columns=columns, formatters=formatters
+    )
+    short_table = header + '\n'.join(short_table.split('\n')[4:-3]) + footer
+    with open(SHORT_TABLE_FILE, 'w') as file:
+        file.write(short_table)
 
-def table_ref(bibcode):
+    # Output combined CSV
+    columns += ['notes', 'z_ref', 'morph_ref']
+    columns -= ['refs']
+    utils.output_csv(ned[columns], 'out/combined.csv', index=False)
+
+    # Catalog bibcodes (NED has a weird format)
+    get_catalogs(ned)
+
+
+def table_ref(bibcodes):
     """
     Formats reference bibcodes for LaTeX table
+    Input:
+        bibcodes (str): list of reference codes joined with ';'
     """
-    return '\citet{%s}' % bibcode.replace('A&A', 'AandA')
+    bibcodes = bibcodes.replace(';nan', '').split(';')
+    bibcodes = list(dict.fromkeys(bibcodes)) # remove duplicates
+    return '\citet{%s}' % ','.join([b.replace('A&A', 'AandA') for b in bibcodes])
+
+
+def compress_duplicates(fits_info):
+    duplicated = fits_info.groupby(['R.A.', 'Dec.'])
+    fits_info['Total Epochs'] = duplicated['Total Epochs'].transform('sum')
+    fits_info['Epochs Pre-SN'] = duplicated['Epochs Pre-SN'].transform('sum')
+    fits_info['Epochs Post-SN'] = duplicated['Epochs Post-SN'].transform('sum')
+    fits_info['First Epoch'] = duplicated['First Epoch'].transform('max')
+    fits_info['Last Epoch'] = duplicated['Last Epoch'].transform('max')
+    fits_info['Next Epoch'] = duplicated['Next Epoch'].transform('min')
+    fits_info.drop(['Band', 'File'], axis=1, inplace=True)
+    fits_info.drop_duplicates(inplace=True)
+    utils.output_csv(fits_info, 'out/sninfo.csv')
+    return fits_info
 
 
 if __name__ == '__main__':

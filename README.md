@@ -8,7 +8,7 @@
     * Plot histogram of # of SNe per # of epochs
     * Output csv with columns:
         * SN name
-        * Discovery date [MJD]
+        * Discovery date
         * GALEX filter
         * GALEX sky coords
         * total epochs, epochs before, epochs after

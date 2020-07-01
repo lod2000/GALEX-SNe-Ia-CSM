@@ -38,13 +38,12 @@ y_list = [uvw1['ab_mag'], uvm2['ab_mag'], uvw2['ab_mag'], fuv['mag_bgsub'], nuv[
 yerr_list = [uvw1['ab_mag_err'], uvm2['ab_mag_err'], uvw2['ab_mag_err'], 
         [fuv['mag_bgsub_err_2'], fuv['mag_bgsub_err_1']], [nuv['mag_bgsub_err_2'], 
         nuv['mag_bgsub_err_1']]]
-formats = ['b.','g.','y.','mD','rD']
-marker_sizes = [6,6,6,4,4]
+formats = ['cp','gp','yp','mD','bo']
 labels = ['Swift W1', 'Swift M2', 'Swift W2', 'GALEX FUV', 'GALEX NUV']
 
-for x, y, yerr, f, ms, label in zip(x_list, y_list, yerr_list, formats, marker_sizes, labels):
+for x, y, yerr, f, label in zip(x_list, y_list, yerr_list, formats, labels):
     markers, caps, bars = plt.errorbar(x, y, yerr=yerr, fmt=f, label=label,
-            linestyle='none', capsize=0, elinewidth=1, ms=ms)
+            linestyle='none', capsize=0, elinewidth=1, ms=4)
     [bar.set_alpha(0.8) for bar in bars]
 
 plt.xlim((0, 72))

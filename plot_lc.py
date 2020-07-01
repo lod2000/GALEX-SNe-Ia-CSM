@@ -37,7 +37,7 @@ def main():
         xlim = (-50, 1000)
 
         bands = ['FUV', 'NUV']
-        colors = ['purple', 'blue']
+        colors = ['m', 'b']
         marker_styles = ['D', 'o']
 
         # Show FUV and NUV data on same plot
@@ -58,11 +58,6 @@ def main():
             bg_list.append([bg, bg_err, sys_err])
             bg_loc.append((sn, band))
 
-            # Add systematic error in quadrature with statistical
-            # TODO temporary fix
-            if pd.isna(sys_err):
-                sys_err = 0
-                sys_err_lum = 0
             lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err_lum ** 2)
             lc['flux_bgsub_err'] = np.sqrt(lc['flux_bgsub_err'] ** 2 + sys_err ** 2)
             lc['luminosity_hostsub'] = lc['luminosity'] - bg_lum
@@ -70,7 +65,8 @@ def main():
 
             # Detect points above background error
             # lc_det = lc[(lc['luminosity'] > bg + bg_err) & (lc['t_delta'] > 0)]
-            lc_det = lc[(lc['luminosity'] - lc['luminosity_err'] > bg_lum + bg_err_lum) & (lc['t_delta'] > 0)]
+            lc_det = lc[(lc['luminosity'] - lc['luminosity_err'] > bg_lum + bg_err_lum) 
+                    & (lc['t_delta'] > 0) & (lc['t_delta'] < 1000)]
             n_det = len(lc_det.index)
             lc_det.insert(0, 'name', np.array([sn] * n_det))
             lc_det.insert(1, 'band', np.array([band] * n_det))
@@ -166,7 +162,7 @@ def get_background(lc):
         # TODO improve sys error estimate (from gPhoton)
         bg = lc.reset_index(drop=True).loc[0,'flux_bgsub']
         bg_err = lc.reset_index(drop=True).loc[0,'flux_bgsub_err']
-        sys_err = np.nan
+        sys_err = 0.07 * bg
 
     return bg, bg_err, sys_err
 

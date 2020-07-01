@@ -54,15 +54,23 @@ def main():
 
             # Get host background levels & errors
             bg, bg_err, sys_err = get_background(lc)
+            bg_lum, bg_err_lum, sys_err_lum = absolute_luminosity(sn, np.array([bg, bg_err, sys_err]), sn_info)
             bg_list.append([bg, bg_err, sys_err])
             bg_loc.append((sn, band))
 
             # Add systematic error in quadrature with statistical
-            lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err ** 2)
-            lc['luminosity_hostsub'] = lc['luminosity'] - bg
+            # TODO temporary fix
+            if pd.isna(sys_err):
+                sys_err = 0
+                sys_err_lum = 0
+            lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err_lum ** 2)
+            lc['flux_bgsub_err'] = np.sqrt(lc['flux_bgsub_err'] ** 2 + sys_err ** 2)
+            lc['luminosity_hostsub'] = lc['luminosity'] - bg_lum
+            lc['flux_hostsub'] = lc['flux_bgsub'] - bg
 
             # Detect points above background error
-            lc_det = lc[lc['luminosity'] > bg + bg_err]
+            # lc_det = lc[(lc['luminosity'] > bg + bg_err) & (lc['t_delta'] > 0)]
+            lc_det = lc[(lc['luminosity'] - lc['luminosity_err'] > bg_lum + bg_err_lum) & (lc['t_delta'] > 0)]
             n_det = len(lc_det.index)
             lc_det.insert(0, 'name', np.array([sn] * n_det))
             lc_det.insert(1, 'band', np.array([band] * n_det))
@@ -74,17 +82,17 @@ def main():
             total_points += len(lc)
 
             # Plot background average of epochs before before
-            ax.axhline(y=bg_err, alpha=0.8, color=color, label=band+' host background')
+            ax.axhline(y=bg_err_lum, alpha=0.8, color=color, label=band+' host background')
 
             # Convert negative luminosities into upper limits and plot
             lc_lims = lc[lc['luminosity'] < 0]
             sigma = 3
-            ax.scatter(lc_lims['t_delta'], sigma * lc_lims['luminosity_err'] - bg, 
+            ax.scatter(lc_lims['t_delta'], sigma * lc_lims['luminosity_err'] - bg_lum, 
                     marker='v', color=color, label='%s %sσ limit' % (band, sigma))
 
             # Plot luminosities
             lc_data = lc[lc['luminosity'] > 0]
-            markers, caps, bars = ax.errorbar(lc_data['t_delta'], lc_data['luminosity'] - bg, 
+            markers, caps, bars = ax.errorbar(lc_data['t_delta'], lc_data['luminosity'] - bg_lum, 
                     yerr=lc_data['luminosity_err'], linestyle='none', marker=marker, ms=4,
                     elinewidth=1, c=color, label=band
             )
@@ -102,8 +110,7 @@ def main():
             # plt.show()
         plt.close()
 
-    # Output DataFrame of background, bg error, and sys error
-    # Right now outputs luminosity; may want to change to flux later
+    # Output DataFrame of background, bg error, and sys error (flux)
     bg_midx = pd.MultiIndex.from_tuples(bg_loc, names=['Name', 'Band'])
     bg_df = pd.DataFrame(bg_list, columns=['Background', 'Background Error', 
             'Systematic Error'], index=bg_midx)
@@ -138,15 +145,13 @@ def get_background(lc):
     """
 
     before = lc[lc['t_delta'] < -50]
-    data = np.array(before['luminosity'])
-    err = np.array(before['luminosity_err'])
+    data = np.array(before['flux_bgsub'])
+    err = np.array(before['flux_bgsub_err'])
     if len(before) > 1:
         # Determine background from weighted average of data before discovery
         weighted_stats = DescrStatsW(data, weights=err, ddof=0)
         bg = weighted_stats.mean
-        bg_err = weighted_stats.std_mean
-        # bg = np.average(data, weights=err)
-        # bg_err = np.sqrt(np.sum(err ** 2))
+        bg_err = weighted_stats.std
         # Reduced chi squared test of data vs background
         rcs = utils.redchisquare(data, np.full(data.size, bg), err, n=0)
         sys_err = err[0] * 0.1
@@ -159,8 +164,8 @@ def get_background(lc):
             bg_err = np.sqrt(np.sum(new_err ** 2))
     else:
         # TODO improve sys error estimate (from gPhoton)
-        bg = lc.reset_index(drop=True).loc[0,'luminosity']
-        bg_err = lc.reset_index(drop=True).loc[0,'luminosity_err']
+        bg = lc.reset_index(drop=True).loc[0,'flux_bgsub']
+        bg_err = lc.reset_index(drop=True).loc[0,'flux_bgsub_err']
         sys_err = np.nan
 
     return bg, bg_err, sys_err
@@ -247,7 +252,7 @@ def absolute_luminosity(sn, fluxes, sn_info):
         mags (Array-like): measured fluxes
         sn_info (DataFrame): includes NED scrape results
     Outputs:
-        absolute luminosities (Array); full of nan if no h_dist is found
+        absolute luminosities (Array)
     """
 
     h_dist = sn_info.loc[sn, 'h_dist'] # Mpc

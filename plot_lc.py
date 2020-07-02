@@ -34,7 +34,10 @@ def main():
 
         # Initialize plot
         fig, ax = plt.subplots()
-        xlim = (-50, 1000)
+        dt_min = -30
+        dt_max = 1000
+        xmax = 0
+        xmin = 0
 
         bands = ['FUV', 'NUV']
         colors = ['m', 'b']
@@ -64,9 +67,8 @@ def main():
             lc['flux_hostsub'] = lc['flux_bgsub'] - bg
 
             # Detect points above background error
-            # lc_det = lc[(lc['luminosity'] > bg + bg_err) & (lc['t_delta'] > 0)]
-            lc_det = lc[(lc['luminosity'] - lc['luminosity_err'] > bg_lum + bg_err_lum) 
-                    & (lc['t_delta'] > 0) & (lc['t_delta'] < 1000)]
+            lc_det = lc[(lc['flux_bgsub'] - lc['flux_bgsub_err'] > bg + 2 * bg_err) 
+                    & (lc['t_delta'] > dt_min) & (lc['t_delta'] < dt_max)]
             n_det = len(lc_det.index)
             lc_det.insert(0, 'name', np.array([sn] * n_det))
             lc_det.insert(1, 'band', np.array([band] * n_det))
@@ -77,32 +79,44 @@ def main():
             # Count total data points
             total_points += len(lc)
 
-            # Plot background average of epochs before before
-            ax.axhline(y=bg_err_lum, alpha=0.8, color=color, label=band+' host background')
+            xmax = max((xmax, np.max(lc['t_delta'])))
+            xmin = min((xmin, np.min(lc['t_delta'])))
+
+            # Plot background average of epochs before discovery
+            # ax.axhline(y=bg_err_lum, alpha=0.8, color=color, label=band+' host 2σ background')
+            ax.axhline(bg, 0, 1, color=color, alpha=0.5, linestyle='--', 
+                linewidth=1, label=band+' host background')
+            ax.fill_between(x=[-4000, 4000], y1=bg - 2 * bg_err, y2=bg + 2 * bg_err, 
+                    color=color, alpha=0.2, label=band+' host 2σ')
 
             # Convert negative luminosities into upper limits and plot
-            lc_lims = lc[lc['luminosity'] < 0]
-            sigma = 3
-            ax.scatter(lc_lims['t_delta'], sigma * lc_lims['luminosity_err'] - bg_lum, 
-                    marker='v', color=color, label='%s %sσ limit' % (band, sigma))
+            # lc_lims = lc[lc['luminosity'] < 0]
+            # sigma = 3
+            # ax.scatter(lc_lims['t_delta'], sigma * lc_lims['luminosity_err'] - bg_lum, 
+            #         marker='v', color=color, label='%s %sσ limit' % (band, sigma))
 
-            # Plot luminosities
-            lc_data = lc[lc['luminosity'] > 0]
-            markers, caps, bars = ax.errorbar(lc_data['t_delta'], lc_data['luminosity'] - bg_lum, 
-                    yerr=lc_data['luminosity_err'], linestyle='none', marker=marker, ms=4,
-                    elinewidth=1, c=color, label=band
+            # Plot fluxes
+            # lc_data = lc[lc['luminosity'] > 0]
+            markers, caps, bars = ax.errorbar(lc['t_delta'], lc['flux_bgsub'], 
+                    yerr=lc['flux_bgsub_err'], linestyle='none', marker=marker, ms=4,
+                    elinewidth=1, c=color, label=band+' flux'
             )
             [bar.set_alpha(0.8) for bar in bars]
 
         # Configure plot
         if len(lc.index) > 0:
             ax.set_xlabel('Time since discovery [days]')
-            ax.set_xlim(xlim)
-            ax.set_ylabel('L_SN - L_host [erg s^-1 Å^-1]')
+            ax.set_xlim((xmin - 50, xmax + 50))
+            ax.set_ylabel('Flux [erg s^-1 Å^-1 cm^-2]')
             # ax.set_ylim(0, None)
             plt.legend()
             fig.suptitle(sn)
-            plt.savefig(Path('lc_plots/' + sn.replace(':','_') + '.png'))
+            plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png'))
+            in_range = lc[(lc['t_delta'] > dt_min) & (lc['t_delta'] < dt_max)]
+            if len(in_range.index) > 0:
+                xlim = (in_range['t_delta'].iloc[0]-20, in_range['t_delta'].iloc[-1]+20)
+                ax.set_xlim(xlim)
+                plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_short.png'))
             # plt.show()
         plt.close()
 
@@ -140,24 +154,27 @@ def get_background(lc):
         sys_err (float): systematic error based on reduced chi-squared test
     """
 
-    before = lc[lc['t_delta'] < -50]
+    before = lc[lc['t_delta'] < -30]
     data = np.array(before['flux_bgsub'])
     err = np.array(before['flux_bgsub_err'])
-    if len(before) > 1:
-        # Determine background from weighted average of data before discovery
-        weighted_stats = DescrStatsW(data, weights=err, ddof=0)
-        bg = weighted_stats.mean
-        bg_err = weighted_stats.std
-        # Reduced chi squared test of data vs background
-        rcs = utils.redchisquare(data, np.full(data.size, bg), err, n=0)
-        sys_err = err[0] * 0.1
+    # Need >1 point before discovery to add
+    if len(before.index) > 1:
+        # Initialize reduced chi-square, sys error values
+        rcs = 2
+        sys_err = 0
+        sys_err_step = np.nanmean(err) * 0.1
         # Reduce RCS to 1 by adding systematic error in quadrature
         while rcs > 1:
-            sys_err += err[0] * 0.1
+            # Combine statistical and systematic error
             new_err = np.sqrt(err ** 2 + sys_err ** 2)
+            # Determine background from weighted average of data before discovery
+            weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
+            bg = weighted_stats.mean
+            bg_err = weighted_stats.std
+            # Reduced chi squared test of data vs background
             rcs = utils.redchisquare(data, np.full(data.size, bg), new_err, n=0)
-            bg = np.average(data, weights=new_err)
-            bg_err = np.sqrt(np.sum(new_err ** 2))
+            # Increase systematic error for next iteration, if necessary
+            sys_err += sys_err_step
     else:
         # TODO improve sys error estimate (from gPhoton)
         bg = lc.reset_index(drop=True).loc[0,'flux_bgsub']

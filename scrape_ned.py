@@ -62,7 +62,7 @@ def main():
     sn_info = combine_sn_info(ned, sn_info)
     utils.output_csv(sn_info, SN_INFO_FILE)
 
-    # plot_redshifts(ned)
+    plot_redshifts(sn_info)
 
 
 def get_sn(sn, sn_info, osc, verb=0):
@@ -266,11 +266,11 @@ def plot_redshifts(ned, bin_width=0.025):
     bins = int((max(z) - min(z)) / bin_width)
     plt.hist(z, bins=bins, histtype='step')
     plt.xlabel('z')
-    plt.xlim((0, max(z)))
+    # plt.xlim((0, max(z)))
     plt.ylabel('# of SNe')
-    plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
+    # plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
     plt.xlim((0,0.5))
-    plt.savefig(Path('out/redshifts_clipped.png'), bbox_inches='tight', dpi=300)
+    plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
 

@@ -212,7 +212,7 @@ def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
     """
 
     print('Writing quick stats...')
-    sne = fits_info.loc[fits_info.index.drop_duplicates()]
+    sne = fits_info['Name'].drop_duplicates()
     post = get_post_obs(fits_info).drop_duplicates(['Name'])
     both = get_pre_post_obs(fits_info).drop_duplicates(['Name'])
     # final_sne = final_sample.drop_duplicates(['Name'])

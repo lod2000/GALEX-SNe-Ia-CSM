@@ -12,6 +12,7 @@ from tqdm import tqdm
 LC_DIR = Path('/mnt/d/GALEXdata_v6/LCs/')
 FITS_DIR = Path('/mnt/d/GALEXdata_v6/fits/')
 DETRAD_CUT = 0.55 # deg
+DT_MIN = -30
 
 
 def main():
@@ -34,7 +35,7 @@ def main():
 
         # Initialize plot
         fig, ax = plt.subplots()
-        dt_min = -30
+        dt_min = DT_MIN
         dt_max = 1000
         xmax = 0
         xmin = 0
@@ -51,8 +52,8 @@ def main():
             except FileNotFoundError:
                 continue
 
-            # Skip if no useful data points found
-            if len(lc.index) == 0:
+            # Skip if no useful data points found or not enough background info
+            if len(lc.index) == 0 or len(lc[lc['t_delta'] < 0].index) == 0:
                 continue
 
             # Get host background levels & errors
@@ -154,7 +155,7 @@ def get_background(lc):
         sys_err (float): systematic error based on reduced chi-squared test
     """
 
-    before = lc[lc['t_delta'] < -30]
+    before = lc[lc['t_delta'] < DT_MIN]
     data = np.array(before['flux_bgsub'])
     err = np.array(before['flux_bgsub_err'])
     # Need >1 point before discovery to add

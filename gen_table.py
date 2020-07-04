@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import utils
+import requests
 
 SN_INFO_FILE = Path('ref/sn_info.csv')
 BIB_FILE = Path('tex/table_references.bib')
@@ -68,7 +69,7 @@ def main():
         file.write(latex_table)
 
     # Generate short table
-    short = sn_info.iloc[0:20]
+    short = sn_info.iloc[0:19]
     short_table = short.to_latex(na_rep='N/A', index=False, escape=False,
         columns=columns, formatters=formatters
     )

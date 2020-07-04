@@ -1,15 +1,16 @@
 \begin{longrotatetable}
 \movetabledown=0.5in
 \begin{deluxetable*}{lcccccccccccll}
-\tablecaption{Caption.\label{tab:Targets}}
-\tabletypesize{\scriptsize}
 \tablewidth{700pt}
+\tablecaption{Targets surveyed by \galex with epochs before and after discovery 
+and $z<0.5$.\label{tab:Targets}}
+\tabletypesize{\scriptsize}
 \movetabledown=0.5in
 \tablehead{
     \multicolumn1l{Target} & \colhead{Disc. Date} & \colhead{\galex Coordinates} & 
     \colhead{Obs.} & \colhead{$t_\text{disc} - t_\text{first}$} & 
     \colhead{$t_\text{last} - t_\text{disc}$} & \colhead{$\Delta t_\text{nearest}$} & 
-    \colhead{Redshift} & \colhead{Distance} & \colhead{$a_V$} & 
+    \colhead{Redshift} & \colhead{Distance} & \colhead{$A_V$} & 
     \colhead{Host} & \multicolumn1l{Reference(s)} \\
     \multicolumn1l{Name} & \colhead{} & \colhead{$\alpha$, $\delta$ (J2000)} & 
     \colhead{Epochs} & \colhead{[days]} & 
@@ -18,26 +19,28 @@
     \colhead{Morph.} & \colhead{}
 }
 \startdata
- ESSENCEg097 &  2004-10-05 &       23h27m37.16s, -9d35m21s &            23 &            407 &          2181 &         357.0 &    0.343 &        1464 &  0.086 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEg142 &  2004-10-09 &        23h28m37.7s, -8d45m04s &            16 &             35 &          2177 &         353.0 &    0.404 &        1725 &  0.078 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEg230 &  2004-10-17 &       1h11m56.31s, 0d07m27.7s &            19 &            376 &          2532 &        1081.0 &    0.392 &        1674 &  0.084 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEm027 &  2005-09-26 &       1h09m15.01s, 0d08m14.8s &            14 &            720 &          1870 &         742.0 &    0.289 &        1233 &  0.078 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEm043 &  2005-09-26 &     23h29m51.73s, -8d56m46.1s &            16 &            387 &          1825 &           1.0 &    0.266 &        1134 &  0.080 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEm062 &  2005-09-25 &     1h09m52.902s, 0d36m19.03s &            14 &            719 &          1829 &         729.0 &    0.314 &        1340 &  0.067 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEm075 &  2005-09-26 &     23h24m42.29s, -8d29m08.7s &            16 &            708 &          2209 &         360.0 &      0.1 &         423 &  0.099 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEn263 &  2005-11-22 &      2h05m14.95s, -4d56m39.1s &            40 &            410 &          1820 &        1421.0 &  0.36264 &        1549 &  0.070 &   N/A &  \citet{2016SDSSD.C...0000:} \\
- ESSENCEn278 &  2005-11-24 &     23h28m17.55s, -9d23m12.4s &            22 &            446 &          1766 &         296.0 &    0.304 &        1297 &  0.109 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEn326 &  2005-11-24 &     23h29m58.59s, -8d53m12.5s &            16 &            446 &          1766 &         291.0 &  0.26465 &        1128 &  0.082 &   N/A &  \citet{2007ApJ...660..239K} \\
- ESSENCEn400 &  2005-11-26 &      1h13m13.26s, -0d23m25.9s &            16 &            781 &          1767 &         676.0 &    0.424 &        1811 &  0.085 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEp425 &  2005-11-24 &     23h29m56.19s, -8d34m24.3s &            20 &            767 &          1766 &         291.0 &    0.458 &        1956 &  0.085 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEp434 &  2005-11-24 &       1h12m40.25s, 0d14m56.6s &            15 &            779 &          2129 &         683.0 &    0.339 &        1447 &  0.094 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEp527 &  2005-12-27 &      2h08m10.47s, -3d32m17.7s &            13 &            766 &          1806 &         327.0 &    0.435 &        1859 &  0.067 &   N/A &  \citet{2007ApJ...666..674M} \\
- ESSENCEq002 &  2006-09-16 &   2h05m12.945s, -3d39m00.723s &            15 &           1029 &          1546 &          64.0 &   0.3469 &        1482 &  0.064 &   N/A &  \citet{2016ApJS..224....3N} \\
- ESSENCEq006 &  2006-09-16 &   2h10m52.276s, -3d57m39.374s &            16 &           1029 &          1543 &          64.0 &     0.29 &        1238 &  0.061 &   N/A &  \citet{2016ApJS..224....3N} \\
- ESSENCEq021 &  2006-09-16 &    2h33m43.919s, -8d05m50.05s &            17 &            694 &          1546 &         398.0 &     0.36 &        1539 &  0.105 &   N/A &  \citet{2016ApJS..224....3N} \\
- ESSENCEq022 &  2006-09-11 &  1h12m03.864s, -0d01m28.9452s &            19 &           1070 &          1838 &         387.0 &  0.22637 &         965 &  0.083 &   N/A &  \citet{2016SDSSD.C...0000:} \\
-    HST04Sas &  2004-05-23 &   12h36m54.125s, 62d08m22.21s &           213 &            118 &          2481 &         329.0 &  0.44643 &        1914 &  0.031 &   N/A &  \citet{2004AJ....127.3121W} \\
-        Hawk &  2004-11-05 &    12h35m41.16s, 62d11m37.19s &           211 &            281 &          2315 &         163.0 &  0.49673 &        2129 &  0.031 &   N/A &  \citet{2004AJ....127.3121W} \\
+ ESSENCEg097 &  2004-10-05 &       23h27m37.16s, -9d35m21s &            23 &            407 &          2181 &           357 &    0.343 &        1464 &  0.086 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEg142 &  2004-10-09 &        23h28m37.7s, -8d45m04s &            16 &             35 &           737 &           353 &    0.404 &        1725 &  0.078 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEg230 &  2004-10-17 &       1h11m56.31s, 0d07m27.7s &            19 &            376 &          2532 &          1081 &    0.392 &        1674 &  0.084 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEm027 &  2005-09-26 &       1h09m15.01s, 0d08m14.8s &            14 &            720 &           756 &           742 &    0.289 &        1233 &  0.078 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEm043 &  2005-09-26 &     23h29m51.73s, -8d56m46.1s &            16 &            387 &           385 &             1 &    0.266 &        1134 &  0.080 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEm062 &  2005-09-25 &     1h09m52.902s, 0d36m19.03s &            14 &            719 &          1829 &           729 &    0.314 &        1340 &  0.067 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEm075 &  2005-09-26 &     23h24m42.29s, -8d29m08.7s &            16 &            708 &          2209 &           360 &      0.1 &         423 &  0.099 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEn263 &  2005-11-22 &      2h05m14.95s, -4d56m39.1s &            40 &            410 &          1820 &          1421 &  0.36264 &        1549 &  0.070 &   N/A &  \citet{2016SDSSD.C...0000:} \\
+ ESSENCEn278 &  2005-11-24 &     23h28m17.55s, -9d23m12.4s &            22 &            446 &           326 &           296 &    0.304 &        1297 &  0.109 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEn326 &  2005-11-24 &     23h29m58.59s, -8d53m12.5s &            16 &            446 &           326 &           291 &  0.26465 &        1128 &  0.082 &   N/A &  \citet{2007ApJ...660..239K} \\
+ ESSENCEn400 &  2005-11-26 &      1h13m13.26s, -0d23m25.9s &            16 &            781 &          1767 &           676 &    0.424 &        1811 &  0.085 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEp425 &  2005-11-24 &     23h29m56.19s, -8d34m24.3s &            20 &            767 &           663 &           291 &    0.458 &        1956 &  0.085 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEp434 &  2005-11-24 &       1h12m40.25s, 0d14m56.6s &            15 &            779 &           697 &           683 &    0.339 &        1447 &  0.094 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEp527 &  2005-12-27 &      2h08m10.47s, -3d32m17.7s &            13 &            766 &           674 &           327 &    0.435 &        1859 &  0.067 &   N/A &  \citet{2007ApJ...666..674M} \\
+ ESSENCEq002 &  2006-09-16 &   2h05m12.945s, -3d39m00.723s &            15 &           1029 &           411 &            64 &   0.3469 &        1482 &  0.064 &   N/A &  \citet{2016ApJS..224....3N} \\
+ ESSENCEq006 &  2006-09-16 &   2h10m52.276s, -3d57m39.374s &            16 &           1029 &           411 &            64 &     0.29 &        1238 &  0.061 &   N/A &  \citet{2016ApJS..224....3N} \\
+ ESSENCEq021 &  2006-09-16 &    2h33m43.919s, -8d05m50.05s &            17 &            694 &           768 &           398 &     0.36 &        1539 &  0.105 &   N/A &  \citet{2016ApJS..224....3N} \\
+ ESSENCEq022 &  2006-09-11 &  1h12m03.864s, -0d01m28.9452s &            19 &           1070 &           742 &           387 &  0.22637 &         965 &  0.083 &   N/A &  \citet{2016SDSSD.C...0000:} \\
+    HST04Sas &  2004-05-23 &   12h36m54.125s, 62d08m22.21s &           213 &            118 &          2481 &           329 &  0.44643 &        1914 &  0.031 &   N/A &  \citet{2004AJ....127.3121W} \\
 \enddata
+\tablecomments{Discovery dates were retrieved from OSC; redshift, Hubble 
+distance, extinction, and host morphology were retrieved from NED. The complete 
+table will be available as supplementary material.}
 \end{deluxetable*}
 \end{longrotatetable}

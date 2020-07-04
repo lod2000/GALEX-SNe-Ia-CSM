@@ -60,6 +60,7 @@ def main():
 
     # Select only those with before+after observations
     final_sample = get_final_sample(fits_info) 
+    utils.output_csv(final_sample, 'ref/sample_fits_info.csv')
 
     # Output compressed CSV without SN name duplicates
     sn_info = compress_duplicates(final_sample.copy())

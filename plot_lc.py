@@ -9,8 +9,8 @@ import utils
 from statsmodels.stats.weightstats import DescrStatsW
 from tqdm import tqdm
 
-LC_DIR = Path('/mnt/d/GALEXdata_v6/LCs/')
-FITS_DIR = Path('/mnt/d/GALEXdata_v6/fits/')
+LC_DIR = Path('/mnt/d/GALEXdata_v7/LCs/')
+FITS_DIR = Path('/mnt/d/GALEXdata_v7/fits/')
 DETRAD_CUT = 0.55 # deg
 DT_MIN = -30
 
@@ -39,6 +39,7 @@ def main():
         dt_max = 1000
         xmax = 0
         xmin = 0
+        handles = labels = []
 
         bands = ['FUV', 'NUV']
         colors = ['m', 'b']
@@ -49,7 +50,7 @@ def main():
             # Import light curve file, if it exists
             try:
                 lc, flag_count = get_lc_data(sn, band, sn_info)
-            except FileNotFoundError:
+            except (FileNotFoundError, pd.errors.EmptyDataError) as e:
                 continue
 
             # Skip if no useful data points found or not enough background info
@@ -73,6 +74,8 @@ def main():
             n_det = len(lc_det.index)
             lc_det.insert(0, 'name', np.array([sn] * n_det))
             lc_det.insert(1, 'band', np.array([band] * n_det))
+            lc_det['sigma_above'] = (lc_det['flux_bgsub'] - bg) / bg_err
+            lc_det['sigma_above_wgt'] = (lc_det['flux_bgsub'] - bg) / (bg_err * lc_det['flux_bgsub_err'] ** 2)
             detections.append(lc_det)
 
             # Count number of data points with each flag
@@ -90,12 +93,6 @@ def main():
             ax.fill_between(x=[-4000, 4000], y1=bg - 2 * bg_err, y2=bg + 2 * bg_err, 
                     color=color, alpha=0.2, label=band+' host 2σ')
 
-            # Convert negative luminosities into upper limits and plot
-            # lc_lims = lc[lc['luminosity'] < 0]
-            # sigma = 3
-            # ax.scatter(lc_lims['t_delta'], sigma * lc_lims['luminosity_err'] - bg_lum, 
-            #         marker='v', color=color, label='%s %sσ limit' % (band, sigma))
-
             # Plot fluxes
             # lc_data = lc[lc['luminosity'] > 0]
             markers, caps, bars = ax.errorbar(lc['t_delta'], lc['flux_bgsub'], 
@@ -104,13 +101,14 @@ def main():
             )
             [bar.set_alpha(0.8) for bar in bars]
 
+            handles, labels = ax.get_legend_handles_labels()
+
         # Configure plot
-        if len(lc.index) > 0:
+        if len(labels) > 0 and len(lc.index) > 0:
             ax.set_xlabel('Time since discovery [days]')
             ax.set_xlim((xmin - 50, xmax + 50))
             ax.set_ylabel('Flux [erg s^-1 Å^-1 cm^-2]')
-            # ax.set_ylim(0, None)
-            plt.legend()
+            plt.legend(handles, labels)
             fig.suptitle(sn)
             plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png'))
             in_range = lc[(lc['t_delta'] > dt_min) & (lc['t_delta'] < dt_max)]

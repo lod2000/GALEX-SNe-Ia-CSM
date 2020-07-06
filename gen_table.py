@@ -10,6 +10,7 @@ CAT_FILE = Path('tex/catalog_codes.txt')
 LATEX_TABLE_TEMPLATE = Path('tex/deluxetable_template.tex')
 LATEX_TABLE_FILE = Path('tex/table.tex')
 SHORT_TABLE_FILE = Path('tex/short_table.tex')
+SHORT_TABLE_LENGTH = 30 # Number of rows to display in short table
 
 
 def main():
@@ -69,7 +70,7 @@ def main():
         file.write(latex_table)
 
     # Generate short table
-    short = sn_info.iloc[0:19]
+    short = sn_info.iloc[0:SHORT_TABLE_LENGTH]
     short_table = short.to_latex(na_rep='N/A', index=False, escape=False,
         columns=columns, formatters=formatters
     )

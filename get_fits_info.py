@@ -237,8 +237,8 @@ def plot_observations(fits_info, final_sample):
     # Outside axis labels only
     fig.add_subplot(111, frameon=False)
     plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False, which='both')
-    plt.xlabel('Total number of epochs', labelpad=6)
-    plt.ylabel('Number of SNe', labelpad=12)
+    plt.xlabel('Total number of epochs', labelpad=12)
+    plt.ylabel('Number of SNe', labelpad=18)
     plt.savefig(Path('figs/observations.png'), bbox_inches='tight', dpi=300)
     plt.show()
 

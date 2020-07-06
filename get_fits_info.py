@@ -67,7 +67,7 @@ def main():
     utils.output_csv(sn_info, SN_INFO_FILE)
 
     # Plot histogram of observations
-    plot_observations(fits_info)
+    plot_observations(fits_info, final_sample)
 
     # Write a few statistics about FITS files
     write_quick_stats(fits_info, final_sample, sn_info, osc, STATS_FILE)
@@ -136,30 +136,6 @@ def compile_fits(fits_files, osc):
     return fits_info
 
 
-def get_post_obs(fits_info):
-    """
-    Returns FITS files with multiple post-discovery observations
-    Input:
-        fits_info (DataFrame): output from compile_fits
-    """
-
-    post = fits_info['Epochs Post-SN']
-    pre = fits_info['Epochs Pre-SN']
-    return fits_info[(post > 1) & (pre == 0)].reset_index(drop=True)
-
-
-def get_pre_post_obs(fits_info):
-    """
-    Returns FITS files with both pre- and post-discovery observations
-    Input:
-        fits_info (DataFrame): output from compile_fits
-    """
-
-    post = fits_info['Epochs Post-SN']
-    pre = fits_info['Epochs Pre-SN']
-    return fits_info[(post > 0) & (pre > 0)].reset_index(drop=True)
-
-
 def get_final_sample(fits_info):
     """
     Strips out FITS files with only a single observation, or with only 
@@ -170,9 +146,9 @@ def get_final_sample(fits_info):
         sample (DataFrame): stripped-down final sample
     """
 
-    # post = get_post_obs(fits_info)
-    both = get_pre_post_obs(fits_info)
-    # return post.append(both).sort_values(by=['Name', 'Band']).reset_index(drop=True)
+    post = fits_info['Epochs Post-SN']
+    pre = fits_info['Epochs Pre-SN']
+    both = fits_info[(post > 0) & (pre > 0)].reset_index(drop=True)
     sample = both.sort_values(by=['Name', 'Band']).set_index('Name', drop=True)
     return sample
 
@@ -214,23 +190,20 @@ def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
 
     print('Writing quick stats...')
     sne = fits_info['Name'].drop_duplicates()
-    post = get_post_obs(fits_info).drop_duplicates(['Name'])
-    both = get_pre_post_obs(fits_info).drop_duplicates(['Name'])
-    # final_sne = final_sample.drop_duplicates(['Name'])
+    final_sne = final_sample.loc[~final_sample.index.duplicated()]
     fuv = final_sample[final_sample['Band'] == 'FUV']
     nuv = final_sample[final_sample['Band'] == 'NUV']
     with open(file, 'w') as f:
         f.write('Quick stats:\n')
         f.write('\tnumber of reference SNe: %s\n' % len(osc))
         f.write('\tnumber of SNe with GALEX data: %s\n' % len(sne))
-        f.write('\tnumber of SNe with multiple observations after discovery: %s\n' % len(post))
-        f.write('\tnumber of SNe with observations before and after discovery: %s\n' % len(both))
+        f.write('\tnumber of SNe with observations before and after discovery: %s\n' % len(final_sne))
         f.write('\tfinal sample size: %s\n' % len(sn_info.index))
         f.write('\tnumber of final SNe with FUV observations: %s\n' % len(fuv))
         f.write('\tnumber of final SNe with NUV observations: %s\n' % len(nuv))
 
 
-def plot_observations(fits_info):
+def plot_observations(fits_info, final_sample):
     """
     Plots histogram of the number of SNe with a given number of observations
     Inputs:
@@ -239,35 +212,35 @@ def plot_observations(fits_info):
 
     print('\nPlotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
+    colors = ['m', 'b']
 
-    fig, axes = plt.subplots(1,2, figsize=(12.0, 4.2))
+    fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05}, figsize=(7,5))
+    fig.set_tight_layout(True)
 
-    for i, band in enumerate(bands):
+    for ax, band, color in zip(axes, bands, colors):
         df = fits_info[fits_info['Band'] == band]
-        
-        # number of SNe per number of epochs for each category
         epochs = df['Total Epochs']
-        post = df[(df['Epochs Post-SN'] > 1) & (df['Epochs Pre-SN'] == 0)]['Total Epochs']
         both = df[(df['Epochs Post-SN'] > 0) & (df['Epochs Pre-SN'] > 0)]['Total Epochs']
 
-        ax = axes[i]
         bins = np.logspace(0, np.log10(np.max(epochs)), 11)
-        ax.hist(epochs, bins=bins, histtype='step', log=False, label='All SNe', align='left')
-        ax.hist(both, bins=bins, histtype='step', log=False, color='orange', align='left',
-                label='SNe with epochs before \nand after discovery', linestyle='--')
-        ax.hist(post, bins=bins, histtype='step', log=False, color='green', align='left',
-                label='SNe with multiple epochs \nafter discovery', linestyle=':')
+        ax.hist(epochs, bins=bins, histtype='step', align='left', color=color,
+                label='all SNe')
+        ax.hist(both, bins=bins, histtype='stepfilled', align='left', color=color,
+                label='before+after', alpha=0.7)
 
-        handles, labels = plt.gca().get_legend_handles_labels()
-        ax.set_xlabel('Total # of epochs in ' + band)
+        ax.set_title(band, x=0.1, y=0.75)
         ax.set_xscale('log')
         ax.xaxis.set_major_formatter(tkr.ScalarFormatter())
-        ax.set_ylabel('# of SNe')
+        ax.legend()
+        ax.label_outer()
 
-    fig.legend(handles, labels)
-
-    plt.savefig(Path('out/observations.png'), bbox_inches='tight', dpi=300)
-    plt.close()
+    # Outside axis labels only
+    fig.add_subplot(111, frameon=False)
+    plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False, which='both')
+    plt.xlabel('Total number of epochs', labelpad=6)
+    plt.ylabel('Number of SNe', labelpad=12)
+    plt.savefig(Path('figs/observations.png'), bbox_inches='tight', dpi=300)
+    plt.show()
 
 
 if __name__ == '__main__':

@@ -1,7 +1,6 @@
 Quick stats:
 	number of reference SNe: 12944
 	number of SNe with GALEX data: 6298
-	number of SNe with multiple observations after discovery: 1258
 	number of SNe with observations before and after discovery: 2216
 	final sample size: 2214
 	number of final SNe with FUV observations: 1623

@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 
 fig, ax = plt.subplots()
+fig.set_tight_layout(True)
 
 os.chdir('filters')
 filters = ['GALEX.FUV.dat', 'GALEX.NUV.dat', 'Swift_UVOT.UVW2.dat',
@@ -33,7 +34,7 @@ for i, f in enumerate(filters):
 
 ax.set_xlabel('Wavelength [Å]')
 ax.set_xlim((1200, 3300))
-ax.set_ylim((0, None))
+ax.set_ylim((-0.5, None))
 ax.set_ylabel('Transmission [%]')
 ax.legend()
 

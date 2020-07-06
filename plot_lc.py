@@ -37,6 +37,7 @@ def main():
 
         # Initialize plot
         fig, ax = plt.subplots()
+        fig.set_tight_layout(True)
         dt_min = DT_MIN
         xmax = 0
         xmin = 0

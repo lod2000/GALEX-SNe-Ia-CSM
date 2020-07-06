@@ -264,13 +264,15 @@ def plot_redshifts(ned, bin_width=0.025):
     z = ned['z']
     z = z[pd.notna(z)].astype(float)
     bins = int((max(z) - min(z)) / bin_width)
-    plt.hist(z, bins=bins, histtype='step')
+    fig, ax = plt.subplots()
+    plt.hist(z, bins=bins, histtype='stepfilled', color='r', alpha=0.8)
+    fig.set_tight_layout(True)
     plt.xlabel('z')
     # plt.xlim((0, max(z)))
     plt.ylabel('# of SNe')
     # plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
     plt.xlim((0,0.5))
-    plt.savefig(Path('out/redshifts.png'), bbox_inches='tight', dpi=300)
+    plt.savefig(Path('figs/redshifts.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
 

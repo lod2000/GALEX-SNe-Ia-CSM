@@ -9,7 +9,7 @@ def main():
     band = 'NUV'
 
     sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
-    osc = pd.read_csv('ref/osc.csv', index_col='Name')
+    disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
 
     fig, ax = plt.subplots()
     fig.set_tight_layout(True)
@@ -40,7 +40,6 @@ def main():
             fs = 'full'
 
         # Add time relative to discovery date
-        disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
         lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
 
         # Add systematics
@@ -65,16 +64,26 @@ def main():
 
         # Plot fluxes
         ax.errorbar(lc['t_delta'], lc['flux_bgsub'] * yscale, 
-                yerr=lc['flux_bgsub_err'] * yscale, linestyle='none', 
+                yerr=lc['flux_bgsub_err_total'] * yscale, linestyle='none', 
                 marker='o', ms=5, fillstyle=fs,
                 elinewidth=1, c=color, label=band+' flux'
         )
 
     # Configure plot
     ax.set_xlabel('Time since discovery [days]')
-    # ax.set_xlim((DT_MIN - 50, xmax))
     ax.set_ylabel('Flux [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp)
+    ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
+    print(ylim_flux)
     plt.legend()
+
+    # Twin axis with absolute luminosity
+    ax2 = ax.twinx()
+    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'h_dist'])
+    luminosity_exp = int(np.log10(max(ylim_luminosity)))
+    ax2.set_ylim(ylim_luminosity / (10**luminosity_exp))
+    ax2.set_ylabel('Luminosity [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$' % luminosity_exp, 
+            rotation=270, labelpad=24)
+
     # plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png'))
     # short_range = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < 1000)]
     # if len(short_range.index) > 0:

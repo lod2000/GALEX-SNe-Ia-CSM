@@ -214,11 +214,13 @@ def import_lc(sn, band):
     return lc
 
 
-def import_external_lc(sn, sn_info):
-    try:
-        lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_phot.csv' % sn))
-        lc['magnitude_abs'], lc['e_magnitude_abs'] = absolute_mag(
-                sn, lc['magnitude'], lc['e_magnitude'], sn_info)
-        return lc
-    except FileNotFoundError as e:
-        raise e
+def import_external_lc(sn, dist, dist_err):
+    """
+    Imports light curve file from an external source (e.g. Swift)
+    """
+
+    lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_phot.csv' % sn))
+    lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag(lc['magnitude'], 
+            dist, mag_err_1=lc['e_magnitude'], dist_err=dist_err)
+    lc['']
+    return lc

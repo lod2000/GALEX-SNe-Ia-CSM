@@ -1,11 +1,12 @@
 import matplotlib
 import matplotlib.pyplot as plt
-from plot_utils import *
+from lc_utils import *
 
 
 def main():
-    sn = 'ESSENCEn278'
+    sn = 'SN2007on'
     xmax = None
+    band = 'NUV'
 
     sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
     osc = pd.read_csv('ref/osc.csv', index_col='Name')
@@ -14,34 +15,46 @@ def main():
     fig.set_tight_layout(True)
 
     # Plot GALEX data
-    bands = ['FUV', 'NUV']
-    colors = ['m', 'b']
+    data = []
+    bands = []
 
-    FUVdata = import_lc(sn, 'FUV')
-    NUVdata = import_lc(sn, 'NUV')
+    if band == 'FUV' or band == 'both':
+        data.append(import_lc(sn, 'FUV'))
+        bands.append('FUV')
+    if band == 'NUV' or band == 'both':
+        data.append(import_lc(sn, 'NUV'))
+        bands.append('NUV')
 
     # Get largest flux exponent
-    fluxes = np.concatenate([FUVdata['flux_bgsub'].to_numpy(), NUVdata['flux_bgsub'].to_numpy()])
+    fluxes = np.concatenate([lc['flux_bgsub'].to_numpy() for lc in data])
     flux_exp = int(np.log10(np.max(fluxes))) - 1
     yscale = 1 / (10**flux_exp)
 
-    for data, band, color in zip([FUVdata, NUVdata], bands, colors):
+    for lc, band in zip(data, bands):
+        # Plot styling
+        if band == 'FUV':
+            color = 'm'
+            fs = 'none'
+        else:
+            color = 'b'
+            fs = 'full'
+
         # Add time relative to discovery date
         disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
-        data['t_delta'] = data['t_mean_mjd'] - disc_date.mjd
+        lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
 
         # Add systematics
-        bg, bg_err, sys_err = get_background(data)
-        data = add_systematics(data, bg, bg_err, sys_err)
+        bg, bg_err, sys_err = get_background(lc)
+        lc = add_systematics(lc, bg, bg_err, sys_err)
 
         # Plot all points before discovery on a compressed scale
-        before = data[data['t_delta'] <= DT_MIN]
+        before = lc[lc['t_delta'] <= DT_MIN]
         before_dt = np.linspace(DT_MIN - 50, DT_MIN, len(before.index))
         ax.errorbar(before_dt, before['flux_bgsub'] * yscale, 
-                yerr=before['flux_bgsub_err_total'] * yscale, marker='<', ms=4,
-                elinewidth=1, c=color, linestyle='none')
+                yerr=before['flux_bgsub_err_total'] * yscale, marker='<', ms=3,
+                elinewidth=1, c=color, linestyle='none', fillstyle=fs)
 
-        data = data[data['t_delta'] > DT_MIN]
+        lc = lc[lc['t_delta'] > DT_MIN]
 
         # Plot background average of epochs before discovery
         ax.axhline(bg * yscale, 0, 1, color=color, alpha=0.5, linestyle='--', 
@@ -51,9 +64,9 @@ def main():
                 color=color, alpha=0.2, label=band+' host 2σ')
 
         # Plot fluxes
-        ax.errorbar(data['t_delta'], data['flux_bgsub'] * yscale, 
-                yerr=data['flux_bgsub_err'] * yscale, linestyle='none', 
-                marker='o', ms=6,
+        ax.errorbar(lc['t_delta'], lc['flux_bgsub'] * yscale, 
+                yerr=lc['flux_bgsub_err'] * yscale, linestyle='none', 
+                marker='o', ms=5, fillstyle=fs,
                 elinewidth=1, c=color, label=band+' flux'
         )
 
@@ -69,21 +82,6 @@ def main():
     #     ax.set_xlim(xlim)
         # plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_short.png'))
     plt.show()
-
-
-def galex_data(sn, band, sn_info):
-    # Import light curve file, if it exists
-    try:
-        lc = import_lc(sn, band)
-    except (FileNotFoundError, pd.errors.EmptyDataError) as e:
-        return None
-
-
-    # Skip if no useful data points found or not enough background info
-    if len(lc.index) == 0 or len(lc[lc['t_delta'] < 0].index) == 0:
-        return None
-
-    return lc, bg, bg_err
 
 
 if __name__ == '__main__':

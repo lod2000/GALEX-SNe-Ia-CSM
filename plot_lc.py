@@ -45,7 +45,7 @@ def main():
         for band, color, marker in zip(bands, colors, marker_styles):
             # Import light curve file, if it exists
             try:
-                lc, flag_count = get_lc_data(sn, band, sn_info)
+                lc, flag_count = get_lc_data(sn, band, sn_info, return_flags=True)
             except (FileNotFoundError, pd.errors.EmptyDataError) as e:
                 continue
 

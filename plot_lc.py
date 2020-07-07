@@ -10,11 +10,6 @@ from plot_utils import *
 from statsmodels.stats.weightstats import DescrStatsW
 from tqdm import tqdm
 
-LC_DIR = Path('/mnt/d/GALEXdata_v7/LCs/')
-FITS_DIR = Path('/mnt/d/GALEXdata_v7/fits/')
-DETRAD_CUT = 0.55 # deg
-DT_MIN = -30
-
 
 def main():
 
@@ -38,7 +33,6 @@ def main():
         # Initialize plot
         fig, ax = plt.subplots()
         fig.set_tight_layout(True)
-        dt_min = DT_MIN
         xmax = 0
         xmin = 0
         handles = labels = []
@@ -68,6 +62,7 @@ def main():
             bg_list.append([bg, bg_err, sys_err])
             bg_loc.append((sn, band))
 
+            # Add systematics to lc error bars
             lc['luminosity_err'] = np.sqrt(lc['luminosity_err'] ** 2 + sys_err_lum ** 2)
             lc['flux_bgsub_err'] = np.sqrt(lc['flux_bgsub_err'] ** 2 + sys_err ** 2)
             lc['luminosity_hostsub'] = lc['luminosity'] - bg_lum
@@ -75,7 +70,7 @@ def main():
 
             # Detect points above background error
             lc_det = lc[(lc['flux_bgsub'] - lc['flux_bgsub_err'] > bg + 2 * bg_err) 
-                    & (lc['t_delta'] > dt_min)]
+                    & (lc['t_delta'] > DT_MIN)]
             n_det = len(lc_det.index)
             lc_det.insert(0, 'name', np.array([sn] * n_det))
             lc_det.insert(1, 'band', np.array([band] * n_det))
@@ -116,7 +111,7 @@ def main():
             plt.legend(handles, labels)
             fig.suptitle(sn)
             plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png'))
-            short_range = lc[(lc['t_delta'] > dt_min) & (lc['t_delta'] < 1000)]
+            short_range = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < 1000)]
             if len(short_range.index) > 0:
                 xlim = (short_range['t_delta'].iloc[0]-20, short_range['t_delta'].iloc[-1]+20)
                 ax.set_xlim(xlim)

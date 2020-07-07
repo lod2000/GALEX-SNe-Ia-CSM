@@ -5,6 +5,12 @@ from astropy.time import Time
 import utils
 from statsmodels.stats.weightstats import DescrStatsW
 
+LC_DIR = Path('/mnt/d/GALEXdata_v7/LCs/')
+FITS_DIR = Path('/mnt/d/GALEXdata_v7/fits/')
+EXTERNAL_LC_DIR = Path('external/')
+DETRAD_CUT = 0.55 # deg
+DT_MIN = -30
+
 
 def get_background(lc):
     """
@@ -105,7 +111,7 @@ def get_lc_data(sn, band, sn_info):
 
 def import_external_lc(sn, sn_info):
     try:
-        lc = pd.read_csv(Path('external/%s_phot.csv' % sn))
+        lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_phot.csv' % sn))
         lc['magnitude_abs'], lc['e_magnitude_abs'] = absolute_mag(
                 sn, lc['magnitude'], lc['e_magnitude'], sn_info)
         return lc

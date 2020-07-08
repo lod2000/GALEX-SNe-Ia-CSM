@@ -6,8 +6,9 @@ from lc_utils import *
 
 
 def main():
-    sn = 'ESSENCEn278'
+    sn = 'SN2007on'
     dt_max = 10000
+    bg_sigma = 3
     bands = ['FUV', 'NUV']
 
     sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
@@ -35,7 +36,6 @@ def main():
         bg, bg_err, sys_err = get_background(lc, 'flux')
 
         # Plot background average of epochs before discovery
-        bg_sigma = 3
         bg_alpha = 0.2
         plt.axhline(bg * yscale, 0, 1, color=color, alpha=0.5, linestyle='--', 
                 linewidth=1)
@@ -65,16 +65,16 @@ def main():
 
     # Add legend
     handles, labels = ax.get_legend_handles_labels()
+    # Greyscale line, patch, and point for host background flux
     bg_line = mlines.Line2D([], [], color='k', linestyle='--', alpha=0.5,
             label='host mean', linewidth=1)
     bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % bg_sigma)
     bg_point = mlines.Line2D([], [], color='k', linestyle='none', marker='<',
-            label='host flux')
-    plt.legend(handles=[bg_patch, bg_line, bg_point] + handles, ncol=5, 
+            label='host flux', ms=5)
+    # Add handles from fluxes
+    plt.legend(handles=[bg_line, bg_patch, bg_point] + handles, ncol=5, 
             loc='lower left', mode='expand', handletextpad=0.5, handlelength=1.2,
             bbox_to_anchor=(0, 1.02, 1., 0), borderaxespad=0)
-    # plt.gca().add_artist(first_legend)
-    # plt.legend(loc='best')
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()

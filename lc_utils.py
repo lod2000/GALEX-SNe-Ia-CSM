@@ -255,3 +255,17 @@ def improve_lc(lc, sn, sn_info):
             lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
 
     return lc
+
+
+def swift_vega2ab(vega_mag, vega_mag_err, filter):
+    """
+    Converts Vega magnitudes from Swift to AB magnitudes, based on the filter
+    Inputs:
+        vega_mag (float or Array): Swift Vega magnitude
+        vega_mag_err (float or Array): Swift Vega magnitude error
+        filter (str): uvw1, uvm2, or uvw2
+    """
+    
+    baseline = {'uvw1': 1.51, 'uvm2': 1.69, 'uvw2': 1.73}
+    c = baseline[filter]
+    return vega_mag + c, np.sqrt(vega_mag_err**2 + 0.03**2)

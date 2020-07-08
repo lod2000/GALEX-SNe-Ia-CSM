@@ -6,30 +6,43 @@ import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from lc_utils import *
 import argparse
+from pathlib import Path
 
 
 def main():
 
     parser = argparse.ArgumentParser(description='Generate publication-quality plots of light curves for individual SNe.')
-    parser.add_argument('sn', metavar='SN', type=str, nargs='+', help='supernova name')
-    parser.add_argument('--band', type=str, choices=['FUV', 'NUV', 'both'], 
+    parser.add_argument('sne', metavar='SN', type=str, nargs='+', help='supernova name')
+    parser.add_argument('-b', '--band', type=str, choices=['FUV', 'NUV', 'both'], 
             default='both', help='GALEX bands to plot')
-    parser.add_argument('--sigma', type=float, default=3, 
+    parser.add_argument('-s', '--sigma', type=float, default=3, 
             help='number of sigma to plot as host background')
-    parser.add_argument('--max', type=float, default=4000,
+    parser.add_argument('-m', '--max', type=float, default=4000,
             help='maximum numer of days after discovery to plot')
+    parser.add_argument('-i', '--info', type=Path, default=Path('ref/sn_info.csv'),
+            help='path to sn info csv file', metavar='file.csv')
+    parser.add_argument('-S', '--show', action='store_true',
+            help='show each plot before saving')
+    parser.add_argument('-o', '--output', type=Path, default=Path('figs/'),
+            help='output directory')
     args = parser.parse_args()
 
-    sn = args.sn[0]
-    bands = ['FUV', 'NUV'] if args.band == 'both' else [args.band]
+    sn_info = pd.read_csv(args.info, index_col='name')
 
-    sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
+    for sn in args.sne:
+        plot(sn, sn_info, args)
+
+
+def plot(sn, sn_info, args):
+
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
     nearest_epoch = sn_info.loc[sn, 'delta_t_next']
     last_epoch = sn_info.loc[sn, 'delta_t_last']
 
-    data = [full_import(sn, band, sn_info) for band in bands]
+    bands = ['FUV', 'NUV'] if args.band == 'both' else [args.band]
     colors = {'FUV': 'm', 'NUV': 'b'}
+
+    data = [full_import(sn, band, sn_info) for band in bands]
 
     fig, ax = plt.subplots(figsize=(8, 5))
     fig.set_tight_layout(True)
@@ -96,7 +109,8 @@ def main():
     luminosity_ax.set_ylabel('Luminosity [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$]' % luminosity_exp, 
             rotation=270, labelpad=24)
 
-    plt.show()
+    plt.savefig(args.output / Path('%s.png' % sn))
+    if args.show: plt.show()
 
 
 def full_import(sn, band, sn_info):

@@ -5,28 +5,20 @@ from lc_utils import *
 
 def main():
     sn = 'ESSENCEn278'
-    dt_max = 10000
-    band = 'both'
+    dt_max = 1000
+    bands = ['FUV', 'NUV']
 
     sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
+    nearest_epoch = sn_info.loc[sn, 'delta_t_next']
+    last_epoch = sn_info.loc[sn, 'delta_t_last']
 
-    fig, ax = plt.subplots(1, 2, sharey=True, gridspec_kw={'width_ratios': [1,10], 'wspace': 0.1})
-    before_ax = ax[0]
-    data_ax = ax[1]
+    data = [full_import(sn, band, sn_info) for band in bands]
+
+    fig, ax = plt.subplots()
     fig.set_tight_layout(True)
 
-    # Plot GALEX data
-    data = []
-    bands = []
-    before_t0 = 0
-
-    if band == 'FUV' or band == 'both':
-        data.append(import_lc(sn, 'FUV'))
-        bands.append('FUV')
-    if band == 'NUV' or band == 'both':
-        data.append(import_lc(sn, 'NUV'))
-        bands.append('NUV')
+    colors = {'FUV': 'm', 'NUV': 'b'}
 
     # Get largest flux exponent
     fluxes = np.concatenate([lc['flux_bgsub'].to_numpy() for lc in data])
@@ -34,21 +26,14 @@ def main():
     yscale = 1 / (10**flux_exp)
 
     for lc, band in zip(data, bands):
-        # Plot styling
-        if band == 'FUV':
-            color = 'm'
-        else:
-            color = 'b'
 
-        # Add time relative to discovery date
-        lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
+        color = colors[band]
 
-        # Add systematics
-        bg, bg_err, sys_err = get_background(lc)
-        lc = add_systematics(lc, bg, bg_err, sys_err)
+        # Systematics
+        bg, bg_err, sys_err = get_background(lc, 'flux')
 
         before = lc[lc['t_delta'] <= DT_MIN]
-        lc = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < dt_max)]
+        after = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < dt_max)]
 
         # Plot background average of epochs before discovery
         plt.axhline(bg * yscale, 0, 1, color=color, alpha=0.5, linestyle='--', 
@@ -58,53 +43,41 @@ def main():
                 color=color, alpha=0.2, label=band+' host 2σ')
 
         # Plot fluxes
-        data_ax.errorbar(lc['t_delta'], lc['flux_bgsub'] * yscale, 
-                yerr=lc['flux_bgsub_err_total'] * yscale, linestyle='none', 
+        ax.errorbar(after['t_delta'], after['flux_bgsub'] * yscale, 
+                yerr=after['flux_bgsub_err_total'] * yscale, linestyle='none', 
                 marker='o', ms=5,
                 elinewidth=1, c=color, label=band+' flux'
         )
 
         # Plot all points before discovery on a compressed scale
-        # before_dt = np.linspace(lc['t_delta'].iloc[0] - 100, 
-        #         lc['t_delta'].iloc[0] - 50, len(before.index))
-        before_dt = np.arange(0, len(before.index)) + before_t0
-        before_t0 += len(before.index) 
-        # before_dt = np.linspace(before_t0, before_t0+1, num=len(before.index), endpoint=False)
-        before_ax.errorbar(before_dt, before['flux_bgsub'] * yscale, 
-                yerr=before['flux_bgsub_err_total'] * yscale, marker='<', ms=4,
-                elinewidth=1, c=color, linestyle='none')
+        dt = (min((last_epoch, dt_max)) - nearest_epoch) / 20
+        before_t = [nearest_epoch - dt] * len(before.index)
+        ax.scatter(before_t, before['flux_bgsub'] * yscale, marker='<', s=5,
+                c=color)
 
     # Configure plot
-    data_ax.set_xlabel('Time since discovery [days]')
-    data_ax.spines['left'].set_visible(False)
-    data_ax.tick_params(axis='y', which='both', left=False, right=False)
-    # data_ax.yaxis.set_ticks_position('right')
-
-    before_ax.set_ylabel('Flux [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp)
-    before_ax.spines['right'].set_visible(False)
-    before_ax.tick_params(axis='y', which='both', left=True, right=False, labelright=False)
-    before_ax.tick_params(axis='x', which='both', top=False, bottom=False, labelbottom=False)
-    ylim_flux = np.array(data_ax.get_ylim()) * 10**flux_exp
+    ax.set_xlabel('Time since discovery [days]')
+    ax.set_ylabel('Flux [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp)
+    ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
     plt.legend()
 
     # Twin axis with absolute luminosity
-    luminosity_ax = data_ax.twinx()
-    # ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'h_dist'])
-    # luminosity_exp = int(np.log10(max(ylim_luminosity)))
-    # luminosity_ax.set_ylim(ylim_luminosity / (10**luminosity_exp))
-    # luminosity_ax.set_ylabel('Luminosity [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$]' % luminosity_exp, 
-    #         rotation=270, labelpad=24)
-    luminosity_ax.spines['left'].set_visible(False)
-    luminosity_ax.tick_params(axis='y', which='both', left=False, right=True, labelleft=False)
-    # luminosity_ax.set_yticks([])
-
-    # plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png'))
-    # short_range = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < 1000)]
-    # if len(short_range.index) > 0:
-    #     xlim = (short_range['t_delta'].iloc[0]-20, short_range['t_delta'].iloc[-1]+20)
-    #     ax.set_xlim(xlim)
-        # plt.savefig(Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_short.png'))
+    luminosity_ax = ax.twinx()
+    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'h_dist'])
+    luminosity_exp = int(np.log10(max(ylim_luminosity)))
+    luminosity_ax.set_ylim(ylim_luminosity / (10**luminosity_exp))
+    luminosity_ax.set_ylabel('Luminosity [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$]' % luminosity_exp, 
+            rotation=270, labelpad=24)
+    
     plt.show()
+
+
+def full_import(sn, band, sn_info):
+
+    lc = import_lc(sn, band)
+    lc = improve_lc(lc, sn, sn_info)
+    lc = add_systematics(lc, 'all')
+    return lc
 
 
 if __name__ == '__main__':

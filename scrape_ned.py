@@ -79,7 +79,7 @@ def get_sn(sn, sn_info, osc, verb=0):
     """
 
     host = osc.loc[sn, 'Host Name']
-    ra, dec = sn_info.loc[sn, 'ra'], sn_info.loc[sn, 'dec']
+    ra, dec = sn_info.loc[sn, 'galex_ra'], sn_info.loc[sn, 'galex_dec']
     if verb:
         print('\n\n%s, host %s, RA %s, Dec %s' % (sn, host, ra, dec))
 

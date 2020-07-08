@@ -1,15 +1,27 @@
+#!/usr/bin/env python
+
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from lc_utils import *
+import argparse
 
 
 def main():
-    sn = 'SN2007on'
-    dt_max = 10000
-    bg_sigma = 3
-    bands = ['FUV', 'NUV']
+
+    parser = argparse.ArgumentParser(description='Generate publication-quality plots of light curves for individual SNe.')
+    parser.add_argument('sn', metavar='SN', type=str, nargs='+', help='supernova name')
+    parser.add_argument('--band', type=str, choices=['FUV', 'NUV', 'both'], 
+            default='both', help='GALEX bands to plot')
+    parser.add_argument('--sigma', type=float, default=3, 
+            help='number of sigma to plot as host background')
+    parser.add_argument('--max', type=float, default=4000,
+            help='maximum numer of days after discovery to plot')
+    args = parser.parse_args()
+
+    sn = args.sn[0]
+    bands = ['FUV', 'NUV'] if args.band == 'both' else [args.band]
 
     sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
@@ -30,7 +42,7 @@ def main():
     # Plot points after discovery
     for lc, band in zip(data, bands):
         color = colors[band]
-        after = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < dt_max)]
+        after = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < args.max)]
 
         # Systematics
         bg, bg_err, sys_err = get_background(lc, 'flux')
@@ -39,8 +51,8 @@ def main():
         bg_alpha = 0.2
         plt.axhline(bg * yscale, 0, 1, color=color, alpha=0.5, linestyle='--', 
                 linewidth=1)
-        plt.axhspan(ymin=(bg - bg_sigma * bg_err) * yscale, 
-                ymax=(bg + bg_sigma * bg_err) * yscale, 
+        plt.axhspan(ymin=(bg - args.sigma * bg_err) * yscale, 
+                ymax=(bg + args.sigma * bg_err) * yscale, 
                 color=color, alpha=bg_alpha)
 
         # Plot fluxes
@@ -68,7 +80,7 @@ def main():
     # Greyscale line, patch, and point for host background flux
     bg_line = mlines.Line2D([], [], color='k', linestyle='--', alpha=0.5,
             label='host mean', linewidth=1)
-    bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % bg_sigma)
+    bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % args.sigma)
     bg_point = mlines.Line2D([], [], color='k', linestyle='none', marker='<',
             label='host flux', ms=5)
     # Add handles from fluxes

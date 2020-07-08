@@ -5,7 +5,7 @@ figure.figsize      : 6.4, 4.8  ## figure size in inches
 lines.linewidth     : 2
 
 ## Axes
-axes.labelsize      : 20
+axes.labelsize      : 16
 axes.titlesize      : 15
 axes.titleweight    : heavy
 

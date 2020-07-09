@@ -30,6 +30,7 @@ def output_csv(df, file, **kwargs):
         df.to_csv(tmp_file, **kwargs)
 
 
+# https://asd.gsfc.nasa.gov/archive/galex/FAQ/counts_background.html
 def galex_ab_mag(cps, band):
     const = 18.82 if band=='FUV' else 20.08
     return -2.5 * np.log10(cps) + const

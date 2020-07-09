@@ -36,8 +36,8 @@ def main():
             plot(sn, sn_info, args)
         except FileNotFoundError:
             print('%s is missing at least one LC file! Skipping for now.' % sn)
-        except ValueError:
-            print('%s is missing a Swift data entry, or something else went wrong.' % sn)
+        # except ValueError:
+        #     print('%s is missing a Swift data entry, or something else went wrong.' % sn)
 
 
 def plot(sn, sn_info, args):

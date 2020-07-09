@@ -110,13 +110,15 @@ def add_systematics(lc, band, quantity='all'):
     return lc
 
 
-def galex_mag2cps(mag, band):
+def galex_mag2cps(mag, mag_err, band):
     """
     Converts AB magnitudes measured by GALEX into flux
     """
 
     zero_point = {'FUV': 18.82, 'NUV': 20.08}
-    return 10 ** (2/5 * (np.vectorize(zero_points.get)(band) - mag))
+    cps = 10 ** (2/5 * (np.vectorize(zero_point.get)(band) - mag))
+    cps_err = cps * (2/5) * np.log(10) * mag_err
+    return cps, cps_err
 
 
 def galex_cps2flux(cps, band):
@@ -186,14 +188,23 @@ def get_background(lc, band, data_col):
     # For few background points, use the polynomial fit of |MCAT - gAper| errors
     # based on the original gAperture (non-background-subtracted) magnitudes
     else:
-        sys_err_mag = gAper_sys_err(np.array(before['mag']), band)
-        sys_err = galex_cps2flux(galex_mag2cps(sys_err_mag, band), band)
+        # Base systematic error on original magnitudes
+        mag = np.array(before['mag'])
+        sys_err_mag = gAper_sys_err(mag, band)
+        # Convert mag -> cps -> flux
+        cps, cps_err = galex_mag2cps(mag, sys_err_mag, band)
+        sys_err = galex_cps2flux(cps_err, band)
+        # Weighted mean of systematic errors by background statistical errors
+        sys_stats = DescrStatsW(sys_err, weights=1/err**2, ddof=0)
+        sys_err = sys_stats.mean
         new_err = np.sqrt(err ** 2 + sys_err ** 2)
+        # If a handful of before points, use weighted mean
         if len(before.index) > 1:
             # Determine background from weighted average of data before discovery
             weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
             bg = weighted_stats.mean
             bg_err = weighted_stats.std
+        # If not, use the first point
         else:
             bg = lc.reset_index(drop=True).loc[0, data_col]
             bg_err = lc.reset_index(drop=True).loc[0, err_col]

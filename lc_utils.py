@@ -221,15 +221,33 @@ def import_lc(sn, band):
     return lc
 
 
-def import_external_lc(sn, dist, dist_err):
+def import_swift_lc(sn, sn_info):
     """
     Imports light curve file from an external source (e.g. Swift)
     """
 
+    # Read CSV and select only Swift UVOT data
     lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_phot.csv' % sn))
-    lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag(lc['magnitude'], 
-            dist, mag_err_1=lc['e_magnitude'], dist_err=dist_err)
-    lc['']
+    lc = lc[(lc['telescope'] == 'Swift') & (lc['instrument'] == 'UVOT') & (lc['upperlimit'] == 'F')]
+
+    # Add days relative to discovery date
+    disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
+    lc['t_delta'] = lc['time'] - disc_date.mjd
+
+    # AB apparent and absolute magnitudes
+    dist = sn_info.loc[sn, 'h_dist']
+    dist_err = sn_info.loc[sn, 'h_dist_err']
+    lc['ab_mag'], lc['ab_mag_err'] = swift_vega2ab(
+            lc['magnitude'], lc['e_magnitude'], lc['band'])
+    lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag_err(
+            lc['ab_mag'], lc['ab_mag_err'], dist, dist_err)
+
+    # Convert to CPS, flux, and luminosity
+    lc['cps'], lc['cps_err'] = swift_mag2cps(lc['ab_mag'], lc['ab_mag_err'], lc['band'])
+    lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
+    lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
+            lc['flux'], lc['flux_err'], dist, dist_err)
+
     return lc
 
 
@@ -257,15 +275,44 @@ def improve_lc(lc, sn, sn_info):
     return lc
 
 
-def swift_vega2ab(vega_mag, vega_mag_err, filter):
+def swift_vega2ab(vega_mag, vega_mag_err, band):
     """
-    Converts Vega magnitudes from Swift to AB magnitudes, based on the filter
+    Converts Vega magnitudes from Swift to AB magnitudes, based on the band;
+    conversion values from Breeveld et al. 2011
     Inputs:
         vega_mag (float or Array): Swift Vega magnitude
         vega_mag_err (float or Array): Swift Vega magnitude error
-        filter (str): uvw1, uvm2, or uvw2
+        band (str or Array): UVW1, UVM2, or UVW2
     """
-    
-    baseline = {'uvw1': 1.51, 'uvm2': 1.69, 'uvw2': 1.73}
-    c = baseline[filter]
-    return vega_mag + c, np.sqrt(vega_mag_err**2 + 0.03**2)
+
+    conversion = {'V':-0.01, 'B':-0.13, 'U': 1.02, 'UVW1': 1.51, 'UVM2': 1.69, 'UVW2': 1.73}
+    conv_error = {'V': 0.01, 'B': 0.02, 'U': 0.02, 'UVW1': 0.03, 'UVM2': 0.03, 'UVW2': 0.03}
+    const = np.vectorize(conversion.get)(band)
+    ab_mag_err = np.sqrt(vega_mag_err**2 + np.vectorize(conv_error.get)(band)**2)
+    return vega_mag + const, ab_mag_err
+
+
+def swift_mag2cps(mag, mag_err, band):
+    # Zero points from Poole et al. 2007
+    zero_point = {'V': 17.89, 'B': 19.11, 'U': 18.34, 'UVW1': 17.49, 
+            'UVM2': 16.82, 'UVW2': 17.35}
+    zpt_err = {'V': 0.013, 'B': 0.016, 'U': 0.020, 'UVW1': 0.03, 'UVM2': 0.03,
+            'UVW2': 0.03}
+    diff = np.vectorize(zero_point.get)(band) - mag
+    diff_err = np.sqrt(mag_err ** 2 + 0.03 ** 2)
+    cps = 10 ** (2/5 * diff)
+    cps_err = cps * (2/5) * np.log(10) * diff_err
+    return cps, cps_err
+
+
+def swift_cps2flux(cps, cps_err, band):
+    # Conversion values from Poole et al. 2007
+    conversion = {'V': 2.614e-16, 'B': 1.472e-16, 'U': 1.63e-16, 
+            'UVW1': 4.3e-16, 'UVM2': 7.5e-16, 'UVW2': 6.0e-16}
+    conv_error = {'V': 8.7e-19, 'B': 5.7e-19, 'U': 2.5e-18, 'UVW1': 2.1e-17, 
+            'UVM2': 1.1e-16, 'UVW2': 6.4e-17}
+    c = np.vectorize(conversion.get)(band)
+    c_err = np.vectorize(conv_error.get)(band)
+    flux = cps * c
+    flux_err = flux * np.sqrt((cps_err/cps)**2 + (c_err/c)**2)
+    return flux, flux_err

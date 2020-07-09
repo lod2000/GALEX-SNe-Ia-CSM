@@ -25,22 +25,34 @@ def main():
             help='show each plot before saving')
     parser.add_argument('-o', '--output', type=Path, default=Path('figs/'),
             help='output directory')
+    parser.add_argument('-e', '--external', action='store_true',
+            help='also plot external light curves')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(args.info, index_col='name')
 
     for sn in args.sne:
-        plot(sn, sn_info, args)
+        try:
+            plot(sn, sn_info, args)
+        except FileNotFoundError:
+            print('%s is missing at least one LC file! Skipping for now.' % sn)
+        except ValueError:
+            print('%s is missing a Swift data entry, or something else went wrong.' % sn)
 
 
 def plot(sn, sn_info, args):
+    """
+    Plots light curve(s) for given SN
+    Inputs:
+        args: parser arguments
+    """
 
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
     nearest_epoch = sn_info.loc[sn, 'delta_t_next']
     last_epoch = sn_info.loc[sn, 'delta_t_last']
 
     bands = ['FUV', 'NUV'] if args.band == 'both' else [args.band]
-    colors = {'FUV': 'm', 'NUV': 'b'}
+    colors = {'FUV': 'm', 'NUV': 'b', 'UVW1': 'maroon', 'UVM2': 'orange', 'UVW2': 'g'}
 
     data = [full_import(sn, band, sn_info) for band in bands]
 
@@ -72,7 +84,7 @@ def plot(sn, sn_info, args):
         ax.errorbar(after['t_delta'], after['flux_bgsub'] * yscale, 
                 yerr=after['flux_bgsub_err_total'] * yscale, linestyle='none', 
                 marker='o', ms=5,
-                elinewidth=1, c=color, label=band+' flux'
+                elinewidth=1, c=color, label=band
         )
 
     # Indicate points before discovery
@@ -80,8 +92,18 @@ def plot(sn, sn_info, args):
     for lc, band in zip(data, bands):
         before = lc[lc['t_delta'] <= DT_MIN]
         before_t = [xmin] * len(before.index)
-        ax.scatter(before_t, before['flux_bgsub'] * yscale, marker='<', s=5,
-                c=colors[band])
+        ax.scatter(before_t, before['flux_bgsub'] * yscale, marker='<', s=15,
+                c=colors[band], label='%s host (%s)' % (band, len(before.index)))
+
+    # Plot external light curves (e.g. Swift)
+    if args.external:
+        lc = import_swift_lc(sn, sn_info)
+        filters = ['UVW1', 'UVM2', 'UVW2']
+        for f in filters:
+            data = lc[lc['band'] == f]
+            ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
+                    yerr=data['flux_err'] * yscale, marker='D', ms=4, label=f,
+                    elinewidth=1, color=colors[f])
 
     # Configure plot
     ax.set_xlabel('Time since discovery [days]')
@@ -94,12 +116,9 @@ def plot(sn, sn_info, args):
     bg_line = mlines.Line2D([], [], color='k', linestyle='--', alpha=0.5,
             label='host mean', linewidth=1)
     bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % args.sigma)
-    bg_point = mlines.Line2D([], [], color='k', linestyle='none', marker='<',
-            label='host flux', ms=5)
     # Add handles from fluxes
-    plt.legend(handles=[bg_line, bg_patch, bg_point] + handles, ncol=5, 
-            loc='lower left', mode='expand', handletextpad=0.5, handlelength=1.2,
-            bbox_to_anchor=(0, 1.02, 1., 0), borderaxespad=0)
+    plt.legend(handles=[bg_line, bg_patch] + handles, ncol=3, 
+            loc='upper right', handletextpad=0.5, handlelength=1.2)
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()
@@ -114,6 +133,11 @@ def plot(sn, sn_info, args):
 
 
 def full_import(sn, band, sn_info):
+    """
+    Imports the light curve for a specified supernova and band, adds luminosity
+    and days since discovery from SN info file, and incorporates background
+    and systematic errors
+    """
 
     lc = import_lc(sn, band)
     lc = improve_lc(lc, sn, sn_info)

@@ -77,20 +77,21 @@ def absolute_mag_err(mag, mag_err, dist, dist_err):
     return mag - mod, np.sqrt(mod_err**2 + mag_err**2)
 
 
-def add_systematics(lc, quantity='all'):
+def add_systematics(lc, band, quantity='all'):
     """
     Adds systematic errors in quadrature to flux and luminosity uncertainties;
     also subtracts host background from flux, luminosity, and magnitude
     Inputs:
         lc (DataFrame): light curve table
-        bg, bg_err, sys_err (float): host background, background error, sys error
+        band (str): 'FUV' or 'NUV'
+        quantity (str, default 'all'): which quantity ('flux' or 'luminosity')
     Outputs:
         expanded light curve table
     """
 
     if quantity in ('flux', 'all'):
         # Get background & systematic error
-        bg, bg_err, sys_err = get_background(lc, 'flux')
+        bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
         # Add systematic error
         lc['flux_bgsub_err_total'] = np.sqrt(lc['flux_bgsub_err']**2 + sys_err**2)
         # Subtract host background
@@ -99,7 +100,7 @@ def add_systematics(lc, quantity='all'):
 
     if quantity in ('luminosity', 'all'):
         # Get background & systematic error
-        bg, bg_err, sys_err = get_background(lc, 'luminosity')
+        bg, bg_err, sys_err = get_background(lc, band, 'luminosity')
         # Add systematic error
         lc['luminosity_err_total'] = np.sqrt(lc['luminosity_err']**2 + sys_err**2)
         # Subtract host background
@@ -109,36 +110,70 @@ def add_systematics(lc, quantity='all'):
     return lc
 
 
-def get_background(lc, quantity='flux'):
+def galex_mag2cps(mag, band):
+    """
+    Converts AB magnitudes measured by GALEX into flux
+    """
+
+    zero_point = {'FUV': 18.82, 'NUV': 20.08}
+    return 10 ** (2/5 * (np.vectorize(zero_points.get)(band) - mag))
+
+
+def galex_cps2flux(cps, band):
+    """
+    Converts GALEX CPS to flux values
+    """
+
+    conversion = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
+    return np.vectorize(conversion.get)(band) * cps
+
+
+def gAper_sys_err(mag, band):
+    """
+    Calculates the systematic error from gAperture at a given magnitude
+    based on Michael's polynomial fits
+    """
+
+    coeffs = {
+            'FUV': [4.07675572e-04, -1.98866713e-02, 3.24293442e-01, -1.75098239e+00],
+            'NUV': [3.38514034e-05, -2.88685479e-03, 9.88349458e-02, -1.69681516e+00,
+                    1.45956431e+01, -5.02610071e+01]
+    }
+    fit = np.poly1d(coeffs[band])
+    return fit(mag)
+
+
+def get_background(lc, band, data_col):
     """
     Calculates the host background for a given light curve. Also calculates the
     systematic error needed to make the reduced chi squared value of the total
     error equal to 1.
     Inputs:
         lc (DataFrame): light curve table
-        quantity (str): 'flux' or 'luminosity' or 'magnitude' (WIP), default 'flux'
+        data_col (str): heading of column with data (e.g. 'flux_bgsub' or 'luminosity')
+        band (str): 'FUV' or 'NUV'
     Outputs:
         bg (float): host background luminosity
         bg_err (float): host background luminosity error
         sys_err (float): systematic error based on reduced chi-squared test
     """
 
-    if quantity == 'flux':
-        header = 'flux_bgsub' 
-    elif quantity == 'luminosity':
-        header = 'luminosity'
-
+    err_col = '%s_err' % data_col
     before = lc[lc['t_delta'] < DT_MIN]
-    data = np.array(before[header])
-    err = np.array(before['%s_err' % header])
-    # Need >1 point before discovery to add
-    if len(before.index) > 1:
+    data = np.array(before[data_col])
+    err = np.array(before[err_col])
+
+    # For many background points, calculate the systematic error using a
+    # reduced chi-squared fit
+    if len(before.index) > 3:
         # Initialize reduced chi-square, sys error values
         rcs = 2
-        sys_err = 0
         sys_err_step = np.nanmean(err) * 0.1
+        sys_err = -sys_err_step
         # Reduce RCS to 1 by adding systematic error in quadrature
         while rcs > 1:
+            # Increase systematic error for next iteration
+            sys_err += sys_err_step
             # Combine statistical and systematic error
             new_err = np.sqrt(err ** 2 + sys_err ** 2)
             # Determine background from weighted average of data before discovery
@@ -147,13 +182,21 @@ def get_background(lc, quantity='flux'):
             bg_err = weighted_stats.std
             # Reduced chi squared test of data vs background
             rcs = utils.redchisquare(data, np.full(data.size, bg), new_err, n=0)
-            # Increase systematic error for next iteration, if necessary
-            sys_err += sys_err_step
+
+    # For few background points, use the polynomial fit of |MCAT - gAper| errors
+    # based on the original gAperture (non-background-subtracted) magnitudes
     else:
-        # TODO improve sys error estimate (from gPhoton)
-        bg = lc.reset_index(drop=True).loc[0, header]
-        bg_err = lc.reset_index(drop=True).loc[0, '%s_err' % header]
-        sys_err = 0.07 * bg
+        sys_err_mag = gAper_sys_err(np.array(before['mag']), band)
+        sys_err = galex_cps2flux(galex_mag2cps(sys_err_mag, band), band)
+        new_err = np.sqrt(err ** 2 + sys_err ** 2)
+        if len(before.index) > 1:
+            # Determine background from weighted average of data before discovery
+            weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
+            bg = weighted_stats.mean
+            bg_err = weighted_stats.std
+        else:
+            bg = lc.reset_index(drop=True).loc[0, data_col]
+            bg_err = lc.reset_index(drop=True).loc[0, err_col]
 
     return bg, bg_err, sys_err
 
@@ -299,7 +342,7 @@ def swift_mag2cps(mag, mag_err, band):
     zpt_err = {'V': 0.013, 'B': 0.016, 'U': 0.020, 'UVW1': 0.03, 'UVM2': 0.03,
             'UVW2': 0.03}
     diff = np.vectorize(zero_point.get)(band) - mag
-    diff_err = np.sqrt(mag_err ** 2 + 0.03 ** 2)
+    diff_err = np.sqrt(mag_err ** 2 + np.vectorize(zpt_err.get)(band) ** 2)
     cps = 10 ** (2/5 * diff)
     cps_err = cps * (2/5) * np.log(10) * diff_err
     return cps, cps_err

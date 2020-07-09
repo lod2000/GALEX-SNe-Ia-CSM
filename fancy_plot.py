@@ -24,7 +24,7 @@ def main():
     parser.add_argument('-S', '--show', action='store_true',
             help='show each plot before saving')
     parser.add_argument('-o', '--output', type=Path, default=Path('figs/'),
-            help='output directory')
+            help='output directory', metavar='dir')
     parser.add_argument('-e', '--external', action='store_true',
             help='also plot external light curves')
     args = parser.parse_args()
@@ -70,7 +70,7 @@ def plot(sn, sn_info, args):
         after = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < args.max)]
 
         # Systematics
-        bg, bg_err, sys_err = get_background(lc, 'flux')
+        bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
 
         # Plot background average of epochs before discovery
         bg_alpha = 0.2
@@ -112,7 +112,7 @@ def plot(sn, sn_info, args):
 
     # Add legend
     handles, labels = ax.get_legend_handles_labels()
-    # Greyscale line, patch, and point for host background flux
+    # Greyscale line, and patch for host background flux
     bg_line = mlines.Line2D([], [], color='k', linestyle='--', alpha=0.5,
             label='host mean', linewidth=1)
     bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % args.sigma)
@@ -141,7 +141,7 @@ def full_import(sn, band, sn_info):
 
     lc = import_lc(sn, band)
     lc = improve_lc(lc, sn, sn_info)
-    lc = add_systematics(lc, 'all')
+    lc = add_systematics(lc, band, 'all')
     return lc
 
 

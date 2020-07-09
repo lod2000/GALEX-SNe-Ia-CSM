@@ -110,6 +110,22 @@ def add_systematics(lc, band, quantity='all'):
     return lc
 
 
+def full_import(sn, band, sn_info):
+    """
+    Imports the light curve for a specified supernova and band, adds luminosity
+    and days since discovery from SN info file, and incorporates background
+    and systematic errors
+    """
+
+    lc = import_lc(sn, band)
+    lc = improve_lc(lc, sn, sn_info)
+    if len(lc.index) == 0:
+        lc.loc[0,:] = np.full(len(lc.columns), np.nan)
+        print('%s has no valid data points in %s!' % (sn, band))
+    lc = add_systematics(lc, band, 'all')
+    return lc
+
+
 def galex_mag2cps(mag, mag_err, band):
     """
     Converts AB magnitudes measured by GALEX into flux

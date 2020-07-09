@@ -118,7 +118,7 @@ def plot(sn, sn_info, args):
     bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % args.sigma)
     # Add handles from fluxes
     plt.legend(handles=[bg_line, bg_patch] + handles, ncol=3, 
-            loc='upper right', handletextpad=0.5, handlelength=1.2)
+            loc='best', handletextpad=0.5, handlelength=1.2)
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()
@@ -130,19 +130,6 @@ def plot(sn, sn_info, args):
 
     plt.savefig(args.output / Path('%s.png' % sn))
     if args.show: plt.show()
-
-
-def full_import(sn, band, sn_info):
-    """
-    Imports the light curve for a specified supernova and band, adds luminosity
-    and days since discovery from SN info file, and incorporates background
-    and systematic errors
-    """
-
-    lc = import_lc(sn, band)
-    lc = improve_lc(lc, sn, sn_info)
-    lc = add_systematics(lc, band, 'all')
-    return lc
 
 
 if __name__ == '__main__':

@@ -8,6 +8,12 @@ from lc_utils import *
 import argparse
 from pathlib import Path
 
+colors = {'FUV' : 'm', 
+          'NUV' : 'b', 
+          'UVW1': 'maroon', 
+          'UVM2': 'orange', 
+          'UVW2': 'g'}
+
 
 def main():
 
@@ -36,8 +42,10 @@ def main():
             plot(sn, sn_info, args)
         except FileNotFoundError:
             print('%s is missing at least one LC file! Skipping for now.' % sn)
+            continue
         # except ValueError:
         #     print('%s is missing a Swift data entry, or something else went wrong.' % sn)
+        #     continue
 
 
 def plot(sn, sn_info, args):
@@ -48,11 +56,8 @@ def plot(sn, sn_info, args):
     """
 
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
-    nearest_epoch = sn_info.loc[sn, 'delta_t_next']
-    last_epoch = sn_info.loc[sn, 'delta_t_last']
 
     bands = ['FUV', 'NUV'] if args.band == 'both' else [args.band]
-    colors = {'FUV': 'm', 'NUV': 'b', 'UVW1': 'maroon', 'UVM2': 'orange', 'UVW2': 'g'}
 
     data = [full_import(sn, band, sn_info) for band in bands]
 
@@ -63,6 +68,10 @@ def plot(sn, sn_info, args):
     fluxes = np.concatenate([lc['flux_bgsub'].to_numpy() for lc in data])
     flux_exp = int(np.log10(np.max(fluxes))) - 1
     yscale = 1 / (10**flux_exp)
+
+    # Plot external light curves (e.g. Swift)
+    if args.external:
+        plot_swift(ax, sn, sn_info, yscale)
 
     # Plot points after discovery
     for lc, band in zip(data, bands):
@@ -95,19 +104,10 @@ def plot(sn, sn_info, args):
         ax.scatter(before_t, before['flux_bgsub'] * yscale, marker='<', s=15,
                 c=colors[band], label='%s host (%s)' % (band, len(before.index)))
 
-    # Plot external light curves (e.g. Swift)
-    if args.external:
-        lc = import_swift_lc(sn, sn_info)
-        filters = ['UVW1', 'UVM2', 'UVW2']
-        for f in filters:
-            data = lc[lc['band'] == f]
-            ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
-                    yerr=data['flux_err'] * yscale, marker='D', ms=4, label=f,
-                    elinewidth=1, color=colors[f])
-
     # Configure plot
     ax.set_xlabel('Time since discovery [days]')
     ax.set_ylabel('Flux [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp)
+    ax.ticklabel_format(useOffset=False)
     ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
 
     # Add legend
@@ -130,6 +130,21 @@ def plot(sn, sn_info, args):
 
     plt.savefig(args.output / Path('%s.png' % sn))
     if args.show: plt.show()
+
+
+def plot_swift(ax, sn, sn_info, yscale):
+    lc = import_swift_lc(sn, sn_info)
+    bands = ['UVW1', 'UVM2', 'UVW2']
+    for band in bands:
+        data = lc[lc['band'] == band]
+        ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
+                yerr=data['flux_err'] * yscale, marker='D', ms=4, label=band,
+                elinewidth=1, color=colors[band])
+    return ax
+
+
+def plot_background(ax):
+    return ax
 
 
 if __name__ == '__main__':

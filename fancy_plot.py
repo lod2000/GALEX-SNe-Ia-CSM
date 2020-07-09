@@ -43,9 +43,6 @@ def main():
         except FileNotFoundError:
             print('%s is missing at least one LC file! Skipping for now.' % sn)
             continue
-        # except ValueError:
-        #     print('%s is missing a Swift data entry, or something else went wrong.' % sn)
-        #     continue
 
 
 def plot(sn, sn_info, args):
@@ -59,7 +56,17 @@ def plot(sn, sn_info, args):
 
     bands = ['FUV', 'NUV'] if args.band == 'both' else [args.band]
 
-    data = [full_import(sn, band, sn_info) for band in bands]
+    data = []
+    exclude = []
+    for band in bands:
+        try:
+            lc = full_import(sn, band, sn_info)
+            data.append(lc)
+        except FileNotFoundError:
+            print('Could not find %s light curve file for %s; skipping for now.' % (band, sn))
+            exclude.append(band)
+
+    for e in exclude: bands.remove(e)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     fig.set_tight_layout(True)
@@ -71,7 +78,11 @@ def plot(sn, sn_info, args):
 
     # Plot external light curves (e.g. Swift)
     if args.external:
-        plot_swift(ax, sn, sn_info, yscale)
+        try:
+            ax = plot_swift(ax, sn, sn_info, yscale)
+        except (ValueError, FileNotFoundError):
+            print('%s is missing a Swift data entry!' % sn)
+
 
     # Plot points after discovery
     for lc, band in zip(data, bands):

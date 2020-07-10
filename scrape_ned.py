@@ -23,7 +23,6 @@ OMEGA_V = 0.7
 WMAP = 4
 CORR_Z = 1
 QUERY_RADIUS = 5. # arcmin
-BLOCK_SIZE = 10
 SN_INFO_FILE = Path('ref/sn_info.csv')
 NED_RESULTS_FILE = Path('ref/ned.csv')
 
@@ -51,12 +50,14 @@ def main():
         sne = np.array([])
 
     # Query NED for all SNe, appending to csv every 10 steps
-    blocks = np.arange(0, len(sne), BLOCK_SIZE)
-    for b in tqdm(blocks):
-        sample = sne[b:min(b+BLOCK_SIZE, len(sne))]
-        block = pd.concat([get_sn(sn, sn_info, osc, verb=0) for sn in sample])
-        ned = pd.concat([ned, block])
-        utils.output_csv(ned, NED_RESULTS_FILE)
+    for i, sn in enumerate(tqdm(sne)):
+        try:
+            ned = pd.concat([ned, get_sn(sn, sn_info, osc, verb=0)])
+        except requests.exceptions.ConnectionError:
+            print('Request for %s timed out.' % sn)
+            sne.append(sn)
+        if i % 10 == 0:
+            utils.output_csv(ned, NED_RESULTS_FILE)
 
     # Combine sn_info and ned
     sn_info = combine_sn_info(ned, sn_info)
@@ -190,7 +191,6 @@ def scrape_overview(objname, verb=0):
         v_helio_err = 'NED_BasicDataTable.basic_col3',
         h_dist = 'NED_DerivedValuesTable.derived_col33',
         h_dist_err = 'NED_DerivedValuesTable.derived_col34',
-        z_indep_dist = 'Redshift_IndependentDistances.ridist_col4[0]',
         type = 'NED_MainTable.main_col5',
         morph = "Classifications.class_col2[class_col1=='Galaxy Morphology']",
         a_v = 'NED_BasicDataTable.qlsize_col17',
@@ -252,7 +252,7 @@ def physical_offset(ra1, dec1, ra2, dec2, h_dist):
 
     ra1, dec1, ra2, dec2 = Angle(ra1), Angle(dec1), Angle(ra2), Angle(dec2)
     diff = Angle(np.sqrt((ra1-ra2)**2 + (dec1-dec2)**2), u.rad)
-    offset = h_dist * diff.value * 1000 # kpc
+    offset = float(h_dist) * float(diff.value) * 1000 # kpc
     return offset
 
 

@@ -1,36 +1,59 @@
 import numpy as np
 import pandas as pd
+from pathlib import Path
+import utils
 
-sn_info = pd.read_csv('out/sn_info.csv', index_col='name')
+sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
+if 'z_indep_dist' in sn_info.columns:
+    sn_info.drop(columns=['z_indep_dist'], inplace=True)
 
-edd = pd.read_csv('ref/qualityDistances.csv', sep='\s*,\s*', usecols=['name', 'pgc', 'DM', 'eDM'], index_col='name', skipinitialspace=True)
-edd.drop_duplicates(inplace=True)
-edd['dist_mpc'] = 10 ** (1/5 * (edd['DM'] + 5)) * 1e-6
-edd['dist_err_mpc'] = edd['dist_mpc'] * 1/5 * np.log(10) * edd['eDM'] * 1e-6
+cf3 = pd.read_csv('ref/qualityDistances.csv', sep='\s*,\s*', usecols=['name', 'pgc', 'DM', 'eDM'], index_col='name', skipinitialspace=True)
+cf3.drop_duplicates(inplace=True)
+cf3['dist_mpc'] = 10 ** (1/5 * (cf3['DM'] + 5)) * 1e-6
+cf3['dist_err_mpc'] = cf3['dist_mpc'] * 1/5 * np.log(10) * cf3['eDM'] * 1e-6
 
 hyperleda = pd.read_csv('ref/hyperleda.info.cgi', sep='\s+\|\s', index_col='name', skipinitialspace=True)
 hyperleda.replace(None, np.nan, inplace=True, regex='\s+\|')
 hyperleda.drop_duplicates(inplace=True)
 
-comb = ned.copy()
-
-for i, row in ned.iterrows():
-    hostname = row['Host Name']
+for i, row in sn_info.iterrows():
+    ned_hostname = row['host']
+    ned_objname = row['objname']
+    osc_hostname = row['osc_host']
     # Grab distance moduli from cosmic flows 3:
-    try:
-        edd_entry = edd.loc[hostname]
-        comb.loc[row.name, 'Distance Modulus'] = edd_entry['DM']
-        comb.loc[row.name, 'Distance Modulus Error'] = edd_entry['eDM']
-        comb.loc[row.name, 'Host PGC'] = edd_entry['pgc']
-    except KeyError:
-        continue
-    # Grab host morphology from hyperleda:
-    try:
-        hyperleda_entry = hyperleda.loc[hostname]
-        comb.loc[row.name, 'Host Morphology'] = hyperleda_entry['type']
-        comb.loc[row.name, 'Host Morphology Code'] = hyperleda_entry['t']
-        comb.loc[row.name, 'Host Position'] = hyperleda_entry['celposj(pgc)']
-    except KeyError:
-        continue
+    if ned_hostname in cf3.index:
+        hostname = ned_hostname
+    elif ned_objname in cf3.index:
+        hostname = ned_objname
+    elif osc_hostname in cf3.index:
+        hostname = osc_hostname
+    else:
+        hostname = np.nan
 
-comb.to_csv('out/ned_edd.csv')
+    if pd.notna(hostname):
+        cf3_entry = cf3.loc[hostname]
+        sn_info.loc[row.name, 'z_indep_dist'] = cf3_entry['dist_mpc']
+        sn_info.loc[row.name, 'z_indep_dist_err'] = cf3_entry['dist_err_mpc']
+        sn_info.loc[row.name, 'z_indep_ref'] = '2016AJ....152...50T'
+        sn_info.loc[row.name, 'pgc'] = cf3_entry['pgc']
+        sn_info.loc[row.name, 'pref_dist'] = cf3_entry['dist_mpc']
+        sn_info.loc[row.name, 'pref_dist_err'] = cf3_entry['dist_err_mpc']
+        sn_info.loc[row.name, 'pref_dist_ref'] = '2016AJ....152...50T'
+    
+    # Grab host morphology from hyperleda:
+    if ned_hostname in hyperleda.index:
+        hostname = ned_hostname
+    elif ned_objname in hyperleda.index:
+        hostname = ned_objname
+    elif osc_hostname in hyperleda.index:
+        hostname = osc_hostname
+    else:
+        hostname = np.nan
+
+    if pd.notna(hostname):
+        hyperleda_entry = hyperleda.loc[hostname]
+        sn_info.loc[row.name, 'morph'] = hyperleda_entry['type']
+        sn_info.loc[row.name, 'morph_ref'] = '2014A&A...570A..13M'
+        sn_info.loc[row.name, 'pgc'] = hyperleda_entry['pgc']
+
+utils.output_csv(sn_info, Path('ref/sn_info.csv'))

@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
 
-ned = pd.read_csv('out/ned_table.csv', index_col='SN Name')
+sn_info = pd.read_csv('out/sn_info.csv', index_col='name')
+
 edd = pd.read_csv('ref/qualityDistances.csv', sep='\s*,\s*', usecols=['name', 'pgc', 'DM', 'eDM'], index_col='name', skipinitialspace=True)
 edd.drop_duplicates(inplace=True)
+edd['dist_mpc'] = 10 ** (1/5 * (edd['DM'] + 5)) * 1e-6
+edd['dist_err_mpc'] = edd['dist_mpc'] * 1/5 * np.log(10) * edd['eDM'] * 1e-6
+
 hyperleda = pd.read_csv('ref/hyperleda.info.cgi', sep='\s+\|\s', index_col='name', skipinitialspace=True)
 hyperleda.replace(None, np.nan, inplace=True, regex='\s+\|')
 hyperleda.drop_duplicates(inplace=True)

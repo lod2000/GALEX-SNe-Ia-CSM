@@ -5,8 +5,8 @@ from astropy.time import Time
 import utils
 from statsmodels.stats.weightstats import DescrStatsW
 
-LC_DIR = Path('/mnt/d/GALEXdata_v9/LCs/')
-FITS_DIR = Path('/mnt/d/GALEXdata_v9/fits/')
+LC_DIR = Path('/mnt/d/GALEXdata_v10/LCs/')
+FITS_DIR = Path('/mnt/d/GALEXdata_v10/fits/')
 EXTERNAL_LC_DIR = Path('external/')
 DETRAD_CUT = 0.55 # deg
 DT_MIN = -30
@@ -305,8 +305,8 @@ def import_swift_lc(sn, sn_info):
     lc['t_delta'] = lc['time'] - disc_date.mjd
 
     # AB apparent and absolute magnitudes
-    dist = sn_info.loc[sn, 'h_dist']
-    dist_err = sn_info.loc[sn, 'h_dist_err']
+    dist = sn_info.loc[sn, 'pref_dist']
+    dist_err = sn_info.loc[sn, 'pref_dist_err']
     lc['ab_mag'], lc['ab_mag_err'] = swift_vega2ab(
             lc['magnitude'], lc['e_magnitude'], lc['band'])
     lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag_err(
@@ -331,8 +331,8 @@ def improve_lc(lc, sn, sn_info):
     lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
 
     # Convert measured fluxes to absolute luminosities
-    dist = sn_info.loc[sn, 'h_dist']
-    dist_err = sn_info.loc[sn, 'h_dist_err']
+    dist = sn_info.loc[sn, 'pref_dist']
+    dist_err = sn_info.loc[sn, 'pref_dist_err']
     lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
             lc['flux_bgsub'], lc['flux_bgsub_err'], dist, dist_err)
 

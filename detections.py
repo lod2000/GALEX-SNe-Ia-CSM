@@ -10,7 +10,7 @@ from lc_utils import *
 from tqdm import tqdm
 
 SIGMA = 3
-OVERWRITE = True
+OVERWRITE = False
 
 
 def main():
@@ -20,7 +20,9 @@ def main():
     # Initialize output DataFrames
     # flagged_points = []    
     # total_points = 0
+    detected_sne = []
     detections = []
+    nondetections = []
     bands = ['FUV', 'NUV']
     colors = {'FUV': 'm', 'NUV': 'b'}
     styles = {'FUV': 'D', 'NUV': 'o'}
@@ -39,7 +41,7 @@ def main():
         xmin = xmax = 0
         short_name = Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_short.png')
         full_name = Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png')
-        make_plot = (not short_name.is_file()) or OVERWRITE
+        make_plot = (not full_name.is_file()) or OVERWRITE
 
         for band in bands:
             # Import light curve
@@ -48,7 +50,20 @@ def main():
             except FileNotFoundError:
                 continue
 
-            detections = find_detections(detections, lc, band, sn)
+            # Detect if 3 points above 3 sigma, or 1 point above 5 sigma
+            lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
+            lc.insert(0, 'name', np.array([sn] * len(lc.index)))
+            lc.insert(1, 'band', np.array([band] * len(lc.index)))
+            if len(lc[lc['sigma_above'] >= 3].index) >= 3:
+                detected_sne.append([sn, band, np.max(lc['sigma_above'])])
+                detections.append(lc[lc['sigma_above'] >= 3])
+                nondetections.append(lc[lc['sigma_above'] < 3])
+            elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
+                detected_sne.append([sn, band, np.max(lc['sigma_above'])])
+                detections.append(lc[lc['sigma_above'] > 5])
+                nondetections.append(lc[lc['sigma_above'] < 5])
+            else:
+                nondetections.append(lc)
 
             xmin = min((xmin, np.min(lc['t_delta'])))
             xmax = max((xmax, np.max(lc['t_delta'])))
@@ -76,23 +91,38 @@ def main():
                 plt.savefig(short_name)
         plt.close()
 
+    # List of SNe with detections
+    detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 'Max Sigma'])
+    utils.output_csv(detected_sne, 'out/detections.csv', index=False)
 
-    detections = pd.DataFrame(detections, columns=['Name', 'Band', 'Max Sigma'])
-    utils.output_csv(detections, 'out/detections.csv', index=False)
+    # Limit plot
+    fig = plt.figure(figsize=(11, 7))
+    ax = fig.add_axes([0.1, 0.1, 0.6, 0.8])
 
+    print('Plotting nondetection limits...')
+    bins = np.arange(-2735, 3105, 365)
+    for lc in tqdm(nondetections):
+        # lc['group'] = ((lc['t_delta'] + 3100) / 365).astype(int)
+        group_max = [lc[lc['group'] == g]['luminosity_hostsub_err'].max() for g in np.arange(17)]
+        ax.scatter(lc['t_delta'], lc['luminosity_hostsub_err'] * SIGMA, 
+                marker=11, color=colors[band], s=20, alpha=0.1)
 
-def find_detections(detections, lc, band, sn):
+    print('Plotting detections...')
+    for lc in tqdm(detections):
+        sn = lc['name'].iloc[0]
+        band = lc['band'].iloc[0]
+        ax.errorbar(lc['t_delta'], lc['luminosity_hostsub'], linestyle='none', 
+                yerr=lc['luminosity_hostsub_err'], marker=styles[band], ms=4, 
+                elinewidth=1, label='%s (%s)' % (sn, band))
 
-    # Calculate # of sigma above
-    lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
-    # lc['bg_sigma_above'] = lc['flux_hostsub'] / bg_err
-    # lc['point_sigma_above'] = lc['flux_hostsub'] / lc['flux_bgsub_err_total']
-
-    # Detect if 3 points above 3 sigma, or 1 point above 5 sigma
-    if len(lc[lc['sigma_above'] > 3].index) >= 3 or len(lc[lc['sigma_above'] > 5].index) >= 1:
-        detections.append([sn, band, np.max(lc['sigma_above'])])
-
-    return detections
+    ax.set_xlim((DT_MIN, None))
+    ax.set_xlabel('Time since discovery [days]')
+    ax.set_ylabel('Luminosity [erg s$^{-1}$ Å$^{-1}$]')
+    ax.set_yscale('log')
+    # ax.set_ylim((1e20, 1e30))
+    plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    plt.savefig('out/limits.png', dpi=500, bbox_inches='tight')
+    plt.show()
 
 
 def plot_band(fig, ax, lc, band, bg, bg_err, marker='', color=''):

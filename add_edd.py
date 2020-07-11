@@ -39,6 +39,11 @@ for i, row in sn_info.iterrows():
         sn_info.loc[row.name, 'pref_dist'] = cf3_entry['dist_mpc']
         sn_info.loc[row.name, 'pref_dist_err'] = cf3_entry['dist_err_mpc']
         sn_info.loc[row.name, 'pref_dist_ref'] = '2016AJ....152...50T'
+    else:
+        sn_info.loc[row.name, 'pref_dist'] = sn_info.loc[row.name, 'h_dist']
+        sn_info.loc[row.name, 'pref_dist_err'] = sn_info.loc[row.name, 'h_dist_err']
+        sn_info.loc[row.name, 'pref_dist_ref'] = sn_info.loc[row.name, 'z_ref']
+
     
     # Grab host morphology from hyperleda:
     if ned_hostname in hyperleda.index:

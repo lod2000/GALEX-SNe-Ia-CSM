@@ -55,7 +55,6 @@ def main():
             ned = pd.concat([ned, get_sn(sn, sn_info, osc, verb=0)])
         except requests.exceptions.ConnectionError:
             print('Request for %s timed out.' % sn)
-            sne.append(sn)
         if i % 10 == 0:
             utils.output_csv(ned, NED_RESULTS_FILE)
 

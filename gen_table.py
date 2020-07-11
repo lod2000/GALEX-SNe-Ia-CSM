@@ -22,11 +22,11 @@ def main():
     # Format coordinates, redshifts & distances
     sn_info['galex_coord'] = sn_info[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
     sn_info['z_str'] = sn_info['z'].round(6).astype('str').replace('0+$','',regex=True)
-    sn_info['h_dist_str'] = sn_info['h_dist'].round(0).astype(int)
+    sn_info['pref_dist_str'] = sn_info['pref_dist'].round(0).astype(int)
     # Add notes
     sn_info['notes'] = sn_info[['z_flag']].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
     # Concat references
-    sn_info['refs'] = sn_info[['z_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
+    sn_info['refs'] = sn_info[['pref_dist_ref', 'morph_ref']].astype('str').agg(';'.join, axis=1)
 
     # Get BibTeX entries and write bibfile
     overwrite = True
@@ -36,7 +36,7 @@ def main():
 
     if overwrite:
         print('Pulling BibTeX entries from ADS...')
-        refs = list(sn_info['posn_ref']) + list(sn_info['z_ref']) + list(sn_info['morph_ref'])
+        refs = list(sn_info['posn_ref']) + list(sn_info['pref_dist_ref']) + list(sn_info['morph_ref'])
         refs = list(dict.fromkeys(refs)) # remove duplicates
         bibcodes = {'bibcode':refs}
         with open('ads_token', 'r') as file:
@@ -52,7 +52,7 @@ def main():
     formatters = {'refs':table_ref}
     columns = ['name', 'disc_date', 'galex_coord', 'epochs_total', 
             'delta_t_first', 'delta_t_last', 'delta_t_next', 'z_str', 
-            'h_dist_str', 'a_v', 'morph', 'refs']
+            'pref_dist_str', 'a_v', 'morph', 'refs']
     # Generate table
     sn_info.reset_index(inplace=True)
     latex_table = sn_info.to_latex(na_rep='N/A', index=False, escape=False,
@@ -87,7 +87,7 @@ def get_catalogs(sn_info):
     Get catalog refcodes (denoted by trailing ':' in NED)
     """
 
-    ref_cols = ['posn_ref', 'z_ref', 'morph_ref']
+    ref_cols = ['posn_ref', 'pref_dist_ref', 'morph_ref', 'pref_dist_ref']
     sn_info[ref_cols] = sn_info[ref_cols].replace(np.nan, '')
     catalogs = []
     for col in ref_cols:

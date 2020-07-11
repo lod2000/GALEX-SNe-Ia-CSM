@@ -1,14 +1,15 @@
 Name,Band,Max Sigma,Verdict,Notes
-ESSENCEn263,NUV,12.05342891,AGN?,>1000 d
+ESSENCEn263,NUV,12.05342891,CSM candidate,>1000 d; lots of very high points; AGN?
 PSc010218,NUV,5.384172691,Ghost,
 SDSS-II SN 16199,NUV,3.871868838,,Few background points; constant (high) flux after
-SDSS-II SN 19778,FUV,8.495714838,CSM,
-SDSS-II SN 19778,NUV,11.41158436,CSM,
-SDSS-II SN 3402,NUV,3.608945963,Nothing,>1000 d
-SDSS-II SN 5890,NUV,3.798818303,Nothing?,>1000 d
+SDSS-II SN 18647,NUV,42.02090887,,Can't tell what's wrong in FITS; might be washed-out field
+SDSS-II SN 19778,FUV,8.495714838,CSM candidate,
+SDSS-II SN 19778,NUV,11.41158436,CSM candidate,
+SDSS-II SN 3402,NUV,3.608945963,Nothing,>1000 d; low background error
+SDSS-II SN 5890,NUV,3.798818303,,>1000 d
 SDSS-II SN 779,FUV,5.847708524,Nothing,>1000 d; few background points; 1 detection
 SN2007on,NUV,84.28122303,Near-peak SN,
-SN2008hv,NUV,5.176710129,Near-peak SN?,Few background points; elliptical sources
+SN2008hv,NUV,5.176710129,,Few background points; elliptical sources
 SN2009gf,NUV,7.153103368,Near-peak SN,
 SN2010ai,NUV,13.55137848,Near-peak SN,
 SNLS-05D3kx,NUV,7.886918986,Washed-out field,1 detection; >1000 d

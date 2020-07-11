@@ -119,6 +119,7 @@ def plot(sn, sn_info, args):
     ax.set_xlabel('Time since discovery [days]')
     ax.set_ylabel('Flux [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp)
     ax.ticklabel_format(useOffset=False)
+    ax.set_title(sn)
     ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
 
     # Add legend
@@ -133,13 +134,13 @@ def plot(sn, sn_info, args):
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()
-    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'h_dist'])
+    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'pref_dist'])
     luminosity_exp = int(np.log10(max(ylim_luminosity)))
     luminosity_ax.set_ylim(ylim_luminosity / (10**luminosity_exp))
     luminosity_ax.set_ylabel('Luminosity [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$]' % luminosity_exp, 
             rotation=270, labelpad=24)
 
-    plt.savefig(args.output / Path('%s.png' % sn))
+    plt.savefig(args.output / Path('%s.png' % sn), dpi=300)
     if args.show: plt.show()
 
 

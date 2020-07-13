@@ -307,6 +307,11 @@ def import_lc(sn, band):
         utils.output_csv(high_bg, BG_FILE, index=True)
         lc = lc[lc['bg_counts'] < 3 * bg_median]
 
+    # Add manual cuts (e.g. previously identified as a ghost image)
+    manual_cuts = pd.read_csv(Path('ref/manual_cuts.csv'))
+    to_remove = manual_cuts[(manual_cuts['name'] == sn) & (manual_cuts['band'] == band)]['index']
+    lc = lc[~lc.index.isin(to_remove)]
+
     return lc
 
 

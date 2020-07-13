@@ -14,7 +14,7 @@ from itertools import repeat
 from functools import partial
 
 SIGMA = 3
-OVERWRITE = True
+OVERWRITE = False
 
 bands = ['FUV', 'NUV']
 colors = {'FUV': 'm', 'NUV': 'b'}
@@ -48,15 +48,8 @@ def main():
             total=len(sn_info.index)
         ))
 
-    # for sn in detected_sn:
-    #     if len(sn) > 0:
-    #         detected_sne += sn
-    detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
-    # print('Plotting light curves...')
-    # for sn in tqdm(sn_info.index):
-    #     detected_sne += detect_sn(sn, sn_info)
-
     # List of SNe with detections
+    detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
     detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 'Max Sigma'])
     utils.output_csv(detected_sne, 'out/detections.csv', index=False)
 

@@ -8,11 +8,10 @@ from lc_utils import *
 import argparse
 from pathlib import Path
 
-colors = {'FUV' : 'm', 
-          'NUV' : 'b', 
-          'UVW1': 'maroon', 
-          'UVM2': 'orange', 
-          'UVW2': 'g'}
+colors = {'FUV' : 'm', 'NUV' : 'b', # GALEX
+          'UVW1': 'maroon', 'UVM2': 'orange', 'UVW2': 'g', # Swift
+          'g': 'c', 'r': 'r', 'i': 'y', 'z': 'brown', 'y': 'k' # Pan-STARRS
+          }
 
 
 def main():
@@ -79,9 +78,13 @@ def plot(sn, sn_info, args):
     # Plot external light curves (e.g. Swift)
     if args.external:
         try:
-            ax = plot_swift(ax, sn, sn_info, yscale)
+            ax = plot_swift(ax, sn, sn_info, yscale, args)
         except (ValueError, FileNotFoundError):
             print('%s is missing a Swift data entry!' % sn)
+        try:
+            ax = plot_panstarrs(ax, sn, sn_info, yscale, args)
+        except (ValueError, FileNotFoundError):
+            print('%s is missing a Pan-STARRS data entry!' % sn)
 
 
     # Plot points after discovery
@@ -144,14 +147,29 @@ def plot(sn, sn_info, args):
     if args.show: plt.show()
 
 
-def plot_swift(ax, sn, sn_info, yscale):
+def plot_swift(ax, sn, sn_info, yscale, args):
     lc = import_swift_lc(sn, sn_info)
+    lc = lc[lc['t_delta'] <= args.max]
     bands = ['UVW1', 'UVM2', 'UVW2']
     for band in bands:
         data = lc[lc['band'] == band]
         ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
                 yerr=data['flux_err'] * yscale, marker='D', ms=4, label=band,
                 elinewidth=1, color=colors[band])
+    return ax
+
+
+def plot_panstarrs(ax, sn, sn_info, yscale, args):
+    lc = import_panstarrs(sn, sn_info)
+    lc = lc[lc['t_delta'] <= args.max]
+    filter_ids = np.arange(1, 6)
+    bands = ['g', 'r', 'i', 'z', 'y']
+    for i in filter_ids:
+        data = lc[lc['filterID'] == i]
+        ax.errorbar(data['t_delta'], data['apFlux_cgs'] * yscale, 
+                yerr=data['apFluxErr_cgs'] * yscale, marker='*', ms=4, 
+                label=bands[i-1], elinewidth=1, color=colors[bands[i-1]],
+                linestyle='none')
     return ax
 
 

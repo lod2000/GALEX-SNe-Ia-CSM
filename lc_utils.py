@@ -220,7 +220,14 @@ def get_background(lc, band, data_col):
             # Determine background from weighted average of data before discovery
             weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
             bg = weighted_stats.mean
-            bg_err = np.sqrt(weighted_stats.std**2 + np.mean(new_err)**2)
+            bg_err = weighted_stats.std
+            bg_err = np.sqrt(np.cov(data, aweights=1/new_err**2))
+            # If there are background points outside the calculated background error,
+            # inflate the background error to include all points
+            bg_outside = before[(before[data_col] > bg + bg_err) | (before[data_col] < bg - bg_err)]
+            if len(bg_outside.index) > 0:
+                bg_err = np.max((np.max(bg_outside[data_col]) - bg, bg - np.min(bg_outside[data_col])))
+            # bg_err = np.sqrt(**2 + np.mean(new_err)**2)
         # If not, use the first point
         else:
             bg = lc.reset_index(drop=True).loc[0, data_col]
@@ -311,6 +318,34 @@ def import_lc(sn, band):
     manual_cuts = pd.read_csv(Path('ref/manual_cuts.csv'))
     to_remove = manual_cuts[(manual_cuts['name'] == sn) & (manual_cuts['band'] == band)]['index']
     lc = lc[~lc.index.isin(to_remove)]
+
+    return lc
+
+
+def import_panstarrs(sn, sn_info):
+    """
+    Imports CSV of detections from Pan-STARRS catalog search
+    """
+    # Assuming order is g, r, i, z, y; from Tonry et al. 2012
+    filters = {1: 4866, 2: 6215, 3: 7545, 4: 8679, 5: 9633} # angstrom
+
+    lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_panstarrs.csv' % sn))
+
+    # Add days relative to discovery date
+    disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
+    lc['t_delta'] = lc['obsTime'] - disc_date.mjd
+
+    # Sky subtraction
+    aperture_area = np.pi * lc['apRadius'] ** 2
+    lc['apFluxSkySub'] = lc['apFlux'] - lc['sky'] * aperture_area
+    lc['apFluxSkySubErr'] = np.sqrt(lc['apFluxErr'] ** 2 + (lc['skyErr'] * aperture_area) ** 2)
+
+    # Convert from Janskys to erg/sec/cm^2/A
+    wavelength = np.vectorize(filters.get)(lc['filterID'])
+    lc['apFlux_cgs'] = lc['apFlux'] * 1e-23 * 3e8 / (wavelength**2 * 1e-10)
+    lc['apFluxErr_cgs'] = lc['apFluxErr'] * 1e-23 * 3e8 / (wavelength**2 * 1e-10)
+    lc['apFluxSkySub_cgs'] = lc['apFluxSkySub'] * 1e-23 * 3e8 / (wavelength**2 * 1e-10)
+    lc['apFluxSkySubErr_cgs'] = lc['apFluxSkySubErr'] * 1e-23 * 3e8 / (wavelength**2 * 1e-10)
 
     return lc
 

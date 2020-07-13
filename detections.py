@@ -10,6 +10,7 @@ import matplotlib.colors as mcolors
 import utils
 from lc_utils import *
 from tqdm import tqdm
+import argparse
 
 import multiprocessing as mp
 from itertools import repeat
@@ -132,9 +133,10 @@ def detect_sn(sn, sn_info, args):
         if make_plot:
             # Host background & systematic error
             bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
-            # 
+            # Plot data from this band
             fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, args,
                     color=colors[band], marker=styles[band], detections=detections)
+            # Figure out best x limits
             xmin = min((xmin, np.min(lc['t_delta'])))
             xmax = max((xmax, np.max(lc['t_delta'])))
 

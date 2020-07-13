@@ -8,6 +8,7 @@ from statsmodels.stats.weightstats import DescrStatsW
 LC_DIR = Path('/mnt/d/GALEXdata_v10/LCs/')
 FITS_DIR = Path('/mnt/d/GALEXdata_v10/fits/')
 EXTERNAL_LC_DIR = Path('external/')
+BG_FILE = Path('out/high_bg.csv')
 DETRAD_CUT = 0.55 # deg
 DT_MIN = -30
 PLATE_SCALE = 6 # as/pixel
@@ -121,7 +122,7 @@ def full_import(sn, band, sn_info):
     lc = improve_lc(lc, sn, sn_info)
     if len(lc.index) == 0:
         lc.loc[0,:] = np.full(len(lc.columns), np.nan)
-        print('%s has no valid data points in %s!' % (sn, band))
+        # print('%s has no valid data points in %s!' % (sn, band))
     lc = add_systematics(lc, band, 'all')
     return lc
 
@@ -287,6 +288,24 @@ def import_lc(sn, band):
 
     # Cut ridiculous flux values
     lc = lc[np.abs(lc['flux_bgsub']) < 1]
+
+    # Cut data with background counts less than 0
+    lc = lc[lc['bg_counts'] >= 0]
+
+    # Cut data with background much higher than average (washed-out fields)
+    # and output high backgrounds to file
+    lc.insert(29, 'bg_cps', lc['bg_counts'] / lc['exptime'])
+    bg_median = np.median(lc['bg_cps'])
+    high_bg = lc[lc['bg_cps'] > 3 * bg_median]
+    if len(high_bg.index) > 0:
+        high_bg.insert(30, 'bg_cps_median', [bg_median] * len(high_bg.index))
+        high_bg.insert(0, 'name', [sn] * len(high_bg.index))
+        high_bg.insert(1, 'band', [band] * len(high_bg.index))
+        if BG_FILE.is_file():
+            high_bg = pd.read_csv(BG_FILE, index_col=0).append(high_bg)
+            high_bg.drop_duplicates(inplace=True)
+        utils.output_csv(high_bg, BG_FILE, index=True)
+        lc = lc[lc['bg_counts'] < 3 * bg_median]
 
     return lc
 

@@ -220,7 +220,7 @@ def get_background(lc, band, data_col):
             # Determine background from weighted average of data before discovery
             weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
             bg = weighted_stats.mean
-            bg_err = weighted_stats.std
+            bg_err = np.sqrt(weighted_stats.std**2 + np.mean(new_err)**2)
         # If not, use the first point
         else:
             bg = lc.reset_index(drop=True).loc[0, data_col]

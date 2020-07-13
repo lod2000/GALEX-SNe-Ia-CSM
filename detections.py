@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,9 +15,6 @@ import multiprocessing as mp
 from itertools import repeat
 from functools import partial
 
-SIGMA = 3
-OVERWRITE = False
-
 bands = ['FUV', 'NUV']
 colors = {'FUV': 'm', 'NUV': 'b'}
 styles = {'FUV': 'D', 'NUV': 'o'}
@@ -23,7 +22,16 @@ styles = {'FUV': 'D', 'NUV': 'o'}
 
 def main():
 
-    sn_info = pd.read_csv('ref/sn_info.csv', index_col='name')
+    parser = argparse.ArgumentParser(description='Detect SNe in GALEX light curves.')
+    parser.add_argument('-s', '--sigma', type=float, default=3, 
+            help='number of sigma to plot as host background')
+    parser.add_argument('-i', '--info', type=Path, default=Path('ref/sn_info.csv'),
+            help='path to sn info csv file', metavar='file.csv')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+            help='re-generate all plots')
+    args = parser.parse_args()
+
+    sn_info = pd.read_csv(args.info, index_col='name')
     if BG_FILE.is_file():
         BG_FILE.unlink()
 
@@ -44,7 +52,8 @@ def main():
 
     with mp.Pool() as pool:
         detected_sne = list(tqdm(
-            pool.imap(partial(detect_sn, sn_info=sn_info), sn_info.index, chunksize=10), 
+            pool.imap(partial(detect_sn, sn_info=sn_info, args=args), 
+                sn_info.index, chunksize=10), 
             total=len(sn_info.index)
         ))
 
@@ -62,7 +71,7 @@ def main():
     # for lc in tqdm(nondetections):
     #     # lc['group'] = ((lc['t_delta'] + 3100) / 365).astype(int)
     #     group_max = [lc[lc['group'] == g]['luminosity_hostsub_err'].max() for g in np.arange(17)]
-    #     ax.scatter(lc['t_delta'], lc['luminosity_hostsub_err'] * SIGMA, 
+    #     ax.scatter(lc['t_delta'], lc['luminosity_hostsub_err'] * args.sigma, 
     #             marker=11, color=colors[band], s=20, alpha=0.1)
 
     # print('Plotting detections...')
@@ -83,13 +92,13 @@ def main():
     # plt.show()
 
 
-def detect_sn(sn, sn_info):
+def detect_sn(sn, sn_info, args):
 
     detected_sne = []
     
     short_name = Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_short.png')
     full_name = Path('lc_plots/' + sn.replace(':','_').replace(' ','_') + '_full.png')
-    make_plot = (not full_name.is_file()) or OVERWRITE
+    make_plot = (not full_name.is_file()) or args.overwrite
 
     if make_plot:
         # Initialize plot
@@ -124,7 +133,7 @@ def detect_sn(sn, sn_info):
             # Host background & systematic error
             bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
             # 
-            fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, 
+            fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, args,
                     color=colors[band], marker=styles[band], detections=detections)
             xmin = min((xmin, np.min(lc['t_delta'])))
             xmax = max((xmax, np.max(lc['t_delta'])))
@@ -150,13 +159,13 @@ def detect_sn(sn, sn_info):
     return detected_sne
 
 
-def plot_band(fig, ax, lc, band, bg, bg_err, marker='', color='', detections=[]):
+def plot_band(fig, ax, lc, band, bg, bg_err, args, marker='', color='', detections=[]):
 
     # Plot background average of epochs before discovery
     bg_alpha = 0.2
     plt.axhline(bg, 0, 1, color=color, alpha=0.5, linestyle='--', 
             linewidth=1)
-    plt.axhspan(ymin=(bg - SIGMA * bg_err), ymax=(bg + SIGMA * bg_err), 
+    plt.axhspan(ymin=(bg - args.sigma * bg_err), ymax=(bg + args.sigma * bg_err), 
             color=color, alpha=bg_alpha)
 
     # Plot detections

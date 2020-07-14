@@ -1,15 +1,9 @@
-Name,Band,Max Sigma,Verdict,Notes
-ESSENCEn263,NUV,12.05342891,CSM candidate,>1000 d; lots of very high points; AGN?
-PSc010218,NUV,5.384172691,Ghost,
-SDSS-II SN 16199,NUV,3.871868838,,Few background points; constant (high) flux after
-SDSS-II SN 18647,NUV,42.02090887,,Can't tell what's wrong in FITS; might be washed-out field
-SDSS-II SN 19778,FUV,8.495714838,CSM candidate,
-SDSS-II SN 19778,NUV,11.41158436,CSM candidate,
-SDSS-II SN 3402,NUV,3.608945963,Nothing,>1000 d; low background error
-SDSS-II SN 5890,NUV,3.798818303,,>1000 d
-SDSS-II SN 779,FUV,5.847708524,Nothing,>1000 d; few background points; 1 detection
-SN2007on,NUV,84.28122303,Near-peak SN,
-SN2008hv,NUV,5.176710129,,Few background points; elliptical sources
-SN2009gf,NUV,7.153103368,Near-peak SN,
-SN2010ai,NUV,13.55137848,Near-peak SN,
-SNLS-05D3kx,NUV,7.886918986,Washed-out field,1 detection; >1000 d
+Name,Band,Max Sigma,Background,Background Error,Systematic Error,Verdict
+ESSENCEn263,NUV,9.651521001,7.91E-17,6.70E-18,6.42E-18,CSM candidate
+SDSS-II SN 19778,FUV,8.370260526,3.31E-17,4.62E-18,4.61E-18,CSM candidate
+SDSS-II SN 19778,NUV,9.026388561,3.81E-17,6.63E-18,6.14E-18,CSM candidate
+SDSS-II SN 779,FUV,6.055141639,,,,
+SN2007jc,FUV,5.019883074,,,,CSM candidate
+SN2007on,NUV,80.49869103,4.91E-18,8.63E-18,5.07E-18,Near-peak
+SN2009gf,NUV,6.599890693,,,,Near-peak
+SN2010ai,NUV,13.15379561,4.67E-18,4.30E-18,9.52E-19,Near-peak

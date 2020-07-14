@@ -93,7 +93,7 @@ def plot(sn, sn_info, args):
         after = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < args.max)]
 
         # Systematics
-        bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
+        bg, bg_err, sys_err = get_background(lc, band)
 
         # Plot background average of epochs before discovery
         bg_alpha = 0.2

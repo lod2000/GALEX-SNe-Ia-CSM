@@ -78,39 +78,6 @@ def absolute_mag_err(mag, mag_err, dist, dist_err):
     return mag - mod, np.sqrt(mod_err**2 + mag_err**2)
 
 
-def add_systematics(lc, band, quantity='all'):
-    """
-    Adds systematic errors in quadrature to flux and luminosity uncertainties;
-    also subtracts host background from flux, luminosity, and magnitude
-    Inputs:
-        lc (DataFrame): light curve table
-        band (str): 'FUV' or 'NUV'
-        quantity (str, default 'all'): which quantity ('flux' or 'luminosity')
-    Outputs:
-        expanded light curve table
-    """
-
-    if quantity in ('flux', 'all'):
-        # Get background & systematic error
-        bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
-        # Add systematic error
-        lc['flux_bgsub_err_total'] = np.sqrt(lc['flux_bgsub_err']**2 + sys_err**2)
-        # Subtract host background
-        lc['flux_hostsub'] = lc['flux_bgsub'] - bg
-        lc['flux_hostsub_err'] = np.sqrt(lc['flux_bgsub_err_total']**2 + bg_err**2)
-
-    if quantity in ('luminosity', 'all'):
-        # Get background & systematic error
-        bg, bg_err, sys_err = get_background(lc, band, 'luminosity')
-        # Add systematic error
-        lc['luminosity_err_total'] = np.sqrt(lc['luminosity_err']**2 + sys_err**2)
-        # Subtract host background
-        lc['luminosity_hostsub'] = lc['luminosity'] - bg
-        lc['luminosity_hostsub_err'] = np.sqrt(lc['luminosity_err']**2 + bg_err**2)
-
-    return lc
-
-
 def full_import(sn, band, sn_info):
     """
     Imports the light curve for a specified supernova and band, adds luminosity
@@ -119,12 +86,37 @@ def full_import(sn, band, sn_info):
     """
 
     lc = import_lc(sn, band)
-    lc = improve_lc(lc, sn, sn_info)
-    if len(lc.index) == 0:
-        lc.loc[0,:] = np.full(len(lc.columns), np.nan)
-        # print('%s has no valid data points in %s!' % (sn, band))
-    lc = add_systematics(lc, band, 'all')
-    return lc
+
+    # Convert dates to MJD
+    lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
+
+    # Add days relative to discovery date
+    disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
+    lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
+
+    # Get background & systematic error
+    bg, bg_err, sys_err = get_background(lc, band)
+    # Add systematic error
+    lc['flux_bgsub_err_total'] = np.sqrt(lc['flux_bgsub_err']**2 + sys_err**2)
+    # Subtract host background
+    lc['flux_hostsub'] = lc['flux_bgsub'] - bg
+    lc['flux_hostsub_err'] = np.sqrt(lc['flux_bgsub_err_total']**2 + bg_err**2)
+
+    # Convert measured fluxes to absolute luminosities
+    dist = sn_info.loc[sn, 'pref_dist']
+    dist_err = sn_info.loc[sn, 'pref_dist_err']
+    lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
+            lc['flux_bgsub'], lc['flux_bgsub_err_total'], dist, dist_err)
+    lc['luminosity_hostsub'], lc['luminosity_hostsub_err'] = absolute_luminosity_err(
+            lc['flux_hostsub'], lc['flux_hostsub_err'], dist, dist_err)
+
+    # Convert apparent to absolute magnitudes
+    lc['absolute_mag'], lc['absolute_mag_err_1'] = absolute_mag_err(
+            lc['mag_bgsub'], lc['mag_bgsub_err_1'], dist, dist_err)
+    lc['absolute_mag_err_2'] = absolute_mag_err(
+            lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
+
+    return lc, bg, bg_err, sys_err
 
 
 def galex_flux2mag(flux, band):
@@ -172,7 +164,7 @@ def gAper_sys_err(mag, band):
     return fit(mag)
 
 
-def get_background(lc, band, data_col):
+def get_background(lc, band):
     """
     Calculates the host background for a given light curve. Also calculates the
     systematic error needed to make the reduced chi squared value of the total
@@ -182,21 +174,19 @@ def get_background(lc, band, data_col):
     Inputs:
         lc (DataFrame): light curve table
         band (str): 'FUV' or 'NUV'
-        data_col (str): heading of column with data (e.g. 'flux_bgsub' or 'luminosity')
     Outputs:
         bg (float): host background
         bg_err (float): host background error; includes systematic error
         sys_err (float): systematic error based on reduced chi-squared test
     """
 
-    err_col = '%s_err' % data_col
     before = lc[lc['t_delta'] < DT_MIN]
-    data = np.array(before[data_col])
-    err = np.array(before[err_col])
+    data = np.array(before['flux_bgsub'])
+    err = np.array(before['flux_bgsub_err'])
 
     # For many background points, calculate the systematic error using a
     # reduced chi-squared fit
-    if len(before.index) > 3:
+    if len(before.index) > 4:
         # Initialize reduced chi-square, sys error values
         rcs = 2
         sys_err_step = np.nanmean(err) * 0.1
@@ -216,23 +206,51 @@ def get_background(lc, band, data_col):
 
     # For few background points, use the polynomial fit of |MCAT - gAper| errors
     # based on the original gAperture (non-background-subtracted) magnitudes
-    else:
-        # If a handful of before points, use weighted mean
-        if len(before.index) > 1:
-            # Determine background from weighted average of data before discovery
-            weighted_stats = DescrStatsW(data, weights=1/err**2, ddof=0)
-            bg = weighted_stats.mean
-            bg_err = weighted_stats.std
-        # If not, use the first point
+    elif len(before.index) > 1:
+        # Determine background from weighted average of data before discovery
+        weighted_stats = DescrStatsW(data, weights=1/err**2, ddof=0)
+        bg = weighted_stats.mean
+        bg_err = weighted_stats.std
+        # Use background if it's positive, or annulus flux if it's not
+        if bg > 0:
+            bg_mag = galex_flux2mag(bg, band)
+            # Calculate systematic error from gAperture photometric error 
+            sys_err_mag = gAper_sys_err(bg_mag, band)
+            # Convert mag error to SNR
+            snr = 1 / (10 ** (sys_err_mag / 2.5) - 1)
+            sys_err = bg / snr
         else:
-            bg = lc.reset_index(drop=True).loc[0, data_col]
-            bg_err = lc.reset_index(drop=True).loc[0, err_col]
-        # Calculate systematic error from gAperture photometric error
-        bg_mag = galex_flux2mag(bg, band)
-        sys_err_mag = gAper_sys_err(bg_mag, band)
-        # Convert mag error to SNR
-        snr = 1 / (10 ** (sys_err_mag / 2.5) - 1)
-        sys_err = snr * bg
+            ann_flux = np.average(before['flux'] - before['flux_bgsub'], weights=1/err**2)
+            bg_mag = galex_flux2mag(ann_flux, band)
+            # Calculate systematic error from gAperture photometric error 
+            sys_err_mag = gAper_sys_err(bg_mag, band)
+            # Convert mag error to SNR
+            snr = 1 / (10 ** (sys_err_mag / 2.5) - 1)
+            sys_err = ann_flux / snr
+        # Include systematic in background uncertainty
+        bg_err = np.sqrt(bg_err ** 2 + sys_err ** 2)
+
+    # Otherwise, just use the first point
+    else:
+        bg = lc['flux_bgsub'].iloc[0]
+        bg_err = lc['flux_bgsub_err'].iloc[0]
+        # Use background if it's positive, or annulus flux if it's not
+        if bg > 0:
+            bg_mag = galex_flux2mag(bg, band)
+            # Calculate systematic error from gAperture photometric error 
+            sys_err_mag = gAper_sys_err(bg_mag, band)
+            # Convert mag error to SNR
+            snr = 1 / (10 ** (sys_err_mag / 2.5) - 1)
+            sys_err = bg / snr
+        else:
+            ann_flux = lc['flux'].iloc[0] - lc['flux_bgsub'].iloc[0]
+            bg_mag = galex_flux2mag(ann_flux, band)
+            # Calculate systematic error from gAperture photometric error 
+            sys_err_mag = gAper_sys_err(bg_mag, band)
+            # Convert mag error to SNR
+            snr = 1 / (10 ** (sys_err_mag / 2.5) - 1)
+            sys_err = ann_flux / snr
+        # Include systematic in background uncertainty
         bg_err = np.sqrt(bg_err ** 2 + sys_err ** 2)
 
     return bg, bg_err, sys_err
@@ -321,6 +339,11 @@ def import_lc(sn, band):
     to_remove = manual_cuts[(manual_cuts['name'] == sn) & (manual_cuts['band'] == band)]['index']
     lc = lc[~lc.index.isin(to_remove)]
 
+    # Add dummy row if lc is otherwise empty
+    # if len(lc.index) == 0:
+    #     lc.loc[0,:] = np.full(len(lc.columns), np.nan)
+        # print('%s has no valid data points in %s!' % (sn, band))
+
     return lc
 
 
@@ -378,30 +401,6 @@ def import_swift_lc(sn, sn_info):
     lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
     lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
             lc['flux'], lc['flux_err'], dist, dist_err)
-
-    return lc
-
-
-def improve_lc(lc, sn, sn_info):
-
-    # Convert dates to MJD
-    lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
-
-    # Add days relative to discovery date
-    disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
-    lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
-
-    # Convert measured fluxes to absolute luminosities
-    dist = sn_info.loc[sn, 'pref_dist']
-    dist_err = sn_info.loc[sn, 'pref_dist_err']
-    lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            lc['flux_bgsub'], lc['flux_bgsub_err'], dist, dist_err)
-
-    # Convert apparent to absolute magnitudes
-    lc['absolute_mag'], lc['absolute_mag_err_1'] = absolute_mag_err(
-            lc['mag_bgsub'], lc['mag_bgsub_err_1'], dist, dist_err)
-    lc['absolute_mag_err_2'] = absolute_mag_err(
-            lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
 
     return lc
 

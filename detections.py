@@ -60,7 +60,8 @@ def main():
 
     # List of SNe with detections
     detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
-    detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 'Max Sigma'])
+    detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 
+            'Max Sigma', 'Background', 'Background Error', 'Systematic Error'])
     utils.output_csv(detected_sne, 'out/detections.csv', index=False)
 
     # Limit plot
@@ -109,17 +110,19 @@ def detect_sn(sn, sn_info, args):
     for band in bands:
         # Import light curve
         try:
-            lc = full_import(sn, band, sn_info)
-        except FileNotFoundError:
+            lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
+        except (FileNotFoundError, KeyError, IndexError):
             continue
 
+        # Host background & systematic error
+        # bg, bg_err, sys_err = get_background(lc, band)
         # Detect if 3 points above 3 sigma, or 1 point above 5 sigma
         threshold = 5
         lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
         lc.insert(0, 'name', np.array([sn] * len(lc.index)))
         lc.insert(1, 'band', np.array([band] * len(lc.index)))
         if len(lc[lc['sigma_above'] >= 3].index) >= 3:
-            detected_sne.append([sn, band, np.max(lc['sigma_above'])])
+            detected_sne.append([sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err])
             threshold = 3
         elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
             detected_sne.append([sn, band, np.max(lc['sigma_above'])])
@@ -131,8 +134,6 @@ def detect_sn(sn, sn_info, args):
         # nondetections = lc[lc['sigma_above'] < threshold]
 
         if make_plot:
-            # Host background & systematic error
-            bg, bg_err, sys_err = get_background(lc, band, 'flux_bgsub')
             # Plot data from this band
             fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, args,
                     color=colors[band], marker=styles[band], detections=detections)
@@ -149,13 +150,13 @@ def detect_sn(sn, sn_info, args):
             plt.legend()
             fig.suptitle(sn)
             # Save full figure
-            plt.savefig(full_name)
+            plt.savefig(full_name, bbox_inches='tight')
             short_range = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < 1000)]
             # Save short figure
             if len(short_range.index) > 0:
                 xlim = (short_range['t_delta'].iloc[0]-20, short_range['t_delta'].iloc[-1]+20)
                 ax.set_xlim(xlim)
-                plt.savefig(short_name)
+                plt.savefig(short_name, bbox_inches='tight')
         plt.close()
 
     return detected_sne

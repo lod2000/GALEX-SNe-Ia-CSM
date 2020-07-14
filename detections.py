@@ -112,13 +112,10 @@ def detect_sn(sn, sn_info, args):
 
     for band in bands:
         # Import light curve
-        with np.errstate(all='raise'):
-            try:
-                lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
-            except (FileNotFoundError, KeyError, IndexError):
-                continue
-            except FloatingPointError:
-                print(sn)
+        try:
+            lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
+        except (FileNotFoundError, KeyError, IndexError):
+            continue
 
         # Host background & systematic error
         # bg, bg_err, sys_err = get_background(lc, band)

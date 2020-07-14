@@ -340,11 +340,7 @@ def import_lc(sn, band):
     # Cut data with background much higher than average (washed-out fields)
     # and output high backgrounds to file
     lc.insert(29, 'bg_cps', lc['bg_counts'] / lc['exptime'])
-    with np.errstate(all='raise'):
-        try:
-            bg_median = np.median(lc['bg_cps'])
-        except FloatingPointError:
-            print(lc)
+    bg_median = np.median(lc['bg_cps'])
     high_bg = lc[lc['bg_cps'] > 3 * bg_median]
     if len(high_bg.index) > 0:
         high_bg.insert(30, 'bg_cps_median', [bg_median] * len(high_bg.index))

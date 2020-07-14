@@ -127,6 +127,16 @@ def full_import(sn, band, sn_info):
     return lc
 
 
+def galex_flux2mag(flux, band):
+    """
+    Converts fluxes from GALEX to AB magnitudes
+    """
+
+    zero_point = {'FUV': 18.82, 'NUV': 20.08}
+    factor = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
+    return -2.5 * np.log10(flux / np.vectorize(factor.get)(band)) + np.vectorize(zero_point.get)(band)
+
+
 def galex_mag2cps(mag, mag_err, band):
     """
     Converts AB magnitudes measured by GALEX into flux
@@ -166,14 +176,16 @@ def get_background(lc, band, data_col):
     """
     Calculates the host background for a given light curve. Also calculates the
     systematic error needed to make the reduced chi squared value of the total
-    error equal to 1.
+    error equal to 1. In cases with only a handful of points before discovery,
+    the systematic error is approximated by the gAperture photometric reliability
+    fit (see gAper_sys_err).
     Inputs:
         lc (DataFrame): light curve table
-        data_col (str): heading of column with data (e.g. 'flux_bgsub' or 'luminosity')
         band (str): 'FUV' or 'NUV'
+        data_col (str): heading of column with data (e.g. 'flux_bgsub' or 'luminosity')
     Outputs:
-        bg (float): host background luminosity
-        bg_err (float): host background luminosity error
+        bg (float): host background
+        bg_err (float): host background error; includes systematic error
         sys_err (float): systematic error based on reduced chi-squared test
     """
 
@@ -198,40 +210,30 @@ def get_background(lc, band, data_col):
             # Determine background from weighted average of data before discovery
             weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
             bg = weighted_stats.mean
-            bg_err = weighted_stats.std
+            bg_err = np.sqrt(weighted_stats.std**2 + sys_err**2)
             # Reduced chi squared test of data vs background
             rcs = utils.redchisquare(data, np.full(data.size, bg), new_err, n=0)
 
     # For few background points, use the polynomial fit of |MCAT - gAper| errors
     # based on the original gAperture (non-background-subtracted) magnitudes
     else:
-        # Base systematic error on original magnitudes
-        mag = np.array(before['mag'])
-        sys_err_mag = gAper_sys_err(mag, band)
-        # Convert mag -> cps -> flux
-        cps, cps_err = galex_mag2cps(mag, sys_err_mag, band)
-        sys_err = galex_cps2flux(cps_err, band)
-        # Weighted mean of systematic errors by background statistical errors
-        sys_stats = DescrStatsW(sys_err, weights=1/err**2, ddof=0)
-        sys_err = sys_stats.mean
-        new_err = np.sqrt(err ** 2 + sys_err ** 2)
         # If a handful of before points, use weighted mean
         if len(before.index) > 1:
             # Determine background from weighted average of data before discovery
-            weighted_stats = DescrStatsW(data, weights=1/new_err**2, ddof=0)
+            weighted_stats = DescrStatsW(data, weights=1/err**2, ddof=0)
             bg = weighted_stats.mean
             bg_err = weighted_stats.std
-            bg_err = np.sqrt(np.cov(data, aweights=1/new_err**2))
-            # If there are background points outside the calculated background error,
-            # inflate the background error to include all points
-            bg_outside = before[(before[data_col] > bg + bg_err) | (before[data_col] < bg - bg_err)]
-            if len(bg_outside.index) > 0:
-                bg_err = np.max((np.max(bg_outside[data_col]) - bg, bg - np.min(bg_outside[data_col])))
-            # bg_err = np.sqrt(**2 + np.mean(new_err)**2)
         # If not, use the first point
         else:
             bg = lc.reset_index(drop=True).loc[0, data_col]
             bg_err = lc.reset_index(drop=True).loc[0, err_col]
+        # Calculate systematic error from gAperture photometric error
+        bg_mag = galex_flux2mag(bg, band)
+        sys_err_mag = gAper_sys_err(bg_mag, band)
+        # Convert mag error to SNR
+        snr = 1 / (10 ** (sys_err_mag / 2.5) - 1)
+        sys_err = snr * bg
+        bg_err = np.sqrt(bg_err ** 2 + sys_err ** 2)
 
     return bg, bg_err, sys_err
 

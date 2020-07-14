@@ -19,6 +19,7 @@ from functools import partial
 bands = ['FUV', 'NUV']
 colors = {'FUV': 'm', 'NUV': 'b'}
 styles = {'FUV': 'D', 'NUV': 'o'}
+np.seterr(all='warn')
 
 
 def main():
@@ -35,6 +36,8 @@ def main():
     sn_info = pd.read_csv(args.info, index_col='name')
     if BG_FILE.is_file():
         BG_FILE.unlink()
+    if EMPTY_LC_FILE.is_file():
+        EMPTY_LC_FILE.unlink()
 
     # Initialize output DataFrames
     # flagged_points = []    
@@ -109,10 +112,13 @@ def detect_sn(sn, sn_info, args):
 
     for band in bands:
         # Import light curve
-        try:
-            lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
-        except (FileNotFoundError, KeyError, IndexError):
-            continue
+        with np.errstate(all='raise'):
+            try:
+                lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
+            except (FileNotFoundError, KeyError, IndexError):
+                continue
+            except FloatingPointError:
+                print(sn)
 
         # Host background & systematic error
         # bg, bg_err, sys_err = get_background(lc, band)
@@ -121,11 +127,12 @@ def detect_sn(sn, sn_info, args):
         lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
         lc.insert(0, 'name', np.array([sn] * len(lc.index)))
         lc.insert(1, 'band', np.array([band] * len(lc.index)))
+        detection = [sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err]
         if len(lc[lc['sigma_above'] >= 3].index) >= 3:
-            detected_sne.append([sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err])
+            detected_sne.append(detection)
             threshold = 3
         elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
-            detected_sne.append([sn, band, np.max(lc['sigma_above'])])
+            detected_sne.append(detection)
         detections = lc[lc['sigma_above'] >= threshold].index
             # detections.append(lc[lc['sigma_above'] > 5])
             # nondetections.append(lc[lc['sigma_above'] < 5])

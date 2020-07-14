@@ -9,6 +9,7 @@ LC_DIR = Path('/mnt/d/GALEXdata_v10/LCs/')
 FITS_DIR = Path('/mnt/d/GALEXdata_v10/fits/')
 EXTERNAL_LC_DIR = Path('external/')
 BG_FILE = Path('out/high_bg.csv')
+EMPTY_LC_FILE = Path('out/empty_lc.csv')
 DETRAD_CUT = 0.55 # deg
 DT_MIN = -30
 PLATE_SCALE = 6 # as/pixel
@@ -78,6 +79,21 @@ def absolute_mag_err(mag, mag_err, dist, dist_err):
     return mag - mod, np.sqrt(mod_err**2 + mag_err**2)
 
 
+def check_if_empty(lc, sn, band):
+    """
+    Checks if a light curve DataFrame is empty after all the cuts during
+    import_lc. If it is, append it to a file and raise an error.
+    """
+
+    if len(lc.index) == 0:
+        empty_lc = pd.DataFrame([[sn, band]], columns=['name', 'band'])
+        if EMPTY_LC_FILE.is_file():
+            empty_lc = pd.read_csv(EMPTY_LC_FILE).append(empty_lc)
+            empty_lc.drop_duplicates(inplace=True)
+        utils.output_csv(empty_lc, EMPTY_LC_FILE, index=False)
+        raise KeyError
+
+
 def full_import(sn, band, sn_info):
     """
     Imports the light curve for a specified supernova and band, adds luminosity
@@ -100,7 +116,7 @@ def full_import(sn, band, sn_info):
     lc['flux_bgsub_err_total'] = np.sqrt(lc['flux_bgsub_err']**2 + sys_err**2)
     # Subtract host background
     lc['flux_hostsub'] = lc['flux_bgsub'] - bg
-    lc['flux_hostsub_err'] = np.sqrt(lc['flux_bgsub_err_total']**2 + bg_err**2)
+    lc['flux_hostsub_err'] = np.sqrt(lc['flux_bgsub_err']**2 + bg_err**2)
 
     # Convert measured fluxes to absolute luminosities
     dist = sn_info.loc[sn, 'pref_dist']
@@ -298,8 +314,8 @@ def import_lc(sn, band):
 
     # Find duplicated headers, if any, and remove all duplicated material
     # then fix original file
-    dup_header = lc[lc['t0'] == 't0']
-    if len(dup_header) > 0:
+    if 't0' in lc['t0']:
+        dup_header = lc[lc['t0'] == 't0']
         lc = lc.iloc[0:dup_header.index[0]]
         lc.to_csv(lc_file, index=False)
     lc = lc.astype(float)
@@ -319,10 +335,16 @@ def import_lc(sn, band):
     # Cut data with background counts less than 0
     lc = lc[lc['bg_counts'] >= 0]
 
+    check_if_empty(lc, sn, band)
+
     # Cut data with background much higher than average (washed-out fields)
     # and output high backgrounds to file
     lc.insert(29, 'bg_cps', lc['bg_counts'] / lc['exptime'])
-    bg_median = np.median(lc['bg_cps'])
+    with np.errstate(all='raise'):
+        try:
+            bg_median = np.median(lc['bg_cps'])
+        except FloatingPointError:
+            print(lc)
     high_bg = lc[lc['bg_cps'] > 3 * bg_median]
     if len(high_bg.index) > 0:
         high_bg.insert(30, 'bg_cps_median', [bg_median] * len(high_bg.index))
@@ -339,8 +361,10 @@ def import_lc(sn, band):
     to_remove = manual_cuts[(manual_cuts['name'] == sn) & (manual_cuts['band'] == band)]['index']
     lc = lc[~lc.index.isin(to_remove)]
 
+    check_if_empty(lc, sn, band)
     # Add dummy row if lc is otherwise empty
     # if len(lc.index) == 0:
+    #     raise
     #     lc.loc[0,:] = np.full(len(lc.columns), np.nan)
         # print('%s has no valid data points in %s!' % (sn, band))
 

@@ -59,7 +59,7 @@ def plot(sn, sn_info, args):
     exclude = []
     for band in bands:
         try:
-            lc = full_import(sn, band, sn_info)
+            lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
             data.append(lc)
         except FileNotFoundError:
             print('Could not find %s light curve file for %s; skipping for now.' % (band, sn))

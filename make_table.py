@@ -21,8 +21,8 @@ def main():
 
     # Format coordinates, redshifts & distances
     sn_info['galex_coord'] = sn_info[['galex_ra', 'galex_dec']].agg(', '.join, axis=1)
-    sn_info['z_str'] = sn_info['z'].round(6).astype('str').replace('0+$','',regex=True)
-    sn_info['pref_dist_str'] = sn_info['pref_dist'].round(0).astype(int)
+    sn_info['z_str'] = sn_info[['z', 'z_err']].round(5).astype('str').replace('0+$','',regex=True).agg('\pm'.join, axis=1)
+    sn_info['pref_dist_str'] = sn_info[['pref_dist', 'pref_dist_err']].astype(str).agg('\pm'.join, axis=1)
     # Add notes
     sn_info['notes'] = sn_info[['z_flag']].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
     # Concat references

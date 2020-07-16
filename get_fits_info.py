@@ -101,7 +101,7 @@ def import_fits(fits_file, osc):
     else:
         min_post = np.nan
 
-    return [sn.name, sn.disc_date.iso, f.band,
+    return [sn.name, sn.disc_date.iso, sn.max_date.iso, f.band,
             f.ra.to_string(unit=u.hour), f.dec.to_string(unit=u.degree), 
             f.epochs, pre, post, int(sn.disc_date.mjd - f.tmeans[0].mjd), 
             int(f.tmeans[-1].mjd - sn.disc_date.mjd), min_post, f.filename,
@@ -129,7 +129,7 @@ def compile_fits(fits_files, osc):
     # Remove empty entries
     stats = list(filter(None, stats))
 
-    fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Band',
+    fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Max Date', 'Band',
             'R.A.', 'Dec.', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN', 
             'First Epoch', 'Last Epoch', 'Next Epoch', 'File', 'Host Name'])
     fits_info = fits_info.astype({'Total Epochs':int, 'Epochs Pre-SN':int, 'Epochs Post-SN':int})
@@ -167,7 +167,9 @@ def compress_duplicates(fits_info):
 
     duplicated = fits_info.groupby(['R.A.', 'Dec.'])
     sn_info = pd.DataFrame([], index=pd.Series(fits_info.index, name='name'))
-    sn_info[['disc_date', 'galex_ra', 'galex_dec', 'osc_host']] = fits_info[['Disc. Date', 'R.A.', 'Dec.', 'Host Name']].copy()
+    old_cols = ['Disc. Date', 'Max Date', 'R.A.', 'Dec.', 'Host Name']
+    new_cols = ['disc_date', 'max_date', 'galex_ra', 'galex_dec', 'osc_host']
+    sn_info[new_cols] = fits_info[old_cols].copy()
     sn_info['epochs_total'] = duplicated['Total Epochs'].transform('sum')
     sn_info['epochs_pre'] = duplicated['Epochs Pre-SN'].transform('sum')
     sn_info['epochs_post'] = duplicated['Epochs Post-SN'].transform('sum')
@@ -241,7 +243,7 @@ def plot_observations(fits_info, final_sample):
     plt.xlabel('Total number of epochs', labelpad=12)
     plt.ylabel('Number of SNe', labelpad=18)
     plt.savefig(Path('figs/observations.png'), bbox_inches='tight', dpi=300)
-    plt.show()
+    plt.close()
 
 
 if __name__ == '__main__':

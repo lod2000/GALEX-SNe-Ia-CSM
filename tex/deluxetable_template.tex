@@ -1,26 +1,27 @@
 \begin{longrotatetable}
 \movetabledown=0.5in
-\begin{deluxetable*}{lcccccccccccll}
+\begin{deluxetable*}{lcccccccccl}
 \tablewidth{700pt}
 \tablecaption{Targets surveyed by \galex with epochs before and after discovery 
 and $z<0.5$. The complete table will be available as supplementary material.
 \label{tab:Targets}}
-\tabletypesize{\footnotesize}
+\tabletypesize{\scriptsize}
 \tablehead{
-    \multicolumn1l{Target} & \colhead{Disc. Date} & \colhead{\galex Coordinates} & 
-    \colhead{Obs.} & \colhead{$t_\text{disc} - t_\text{first}$} & 
-    \colhead{$t_\text{last} - t_\text{disc}$} & \colhead{$\Delta t_\text{nearest}$} & 
-    \colhead{Redshift} & \colhead{Distance} & \colhead{$A_V$} & 
-    \colhead{Host} & \multicolumn1l{Reference(s)} \\
-    \multicolumn1l{Name} & \colhead{} & \colhead{$\alpha$, $\delta$ (J2000)} & 
+    \colhead{Target} & \colhead{Disc. Date} & \colhead{\galex Coordinates} & 
+    \colhead{Obs.} & \colhead{$\Delta t_\text{first}$} & 
+    \colhead{$\Delta t_\text{last}$} & \colhead{$\Delta t_\text{nearest}$} & 
+    \colhead{Redshift} & \colhead{Distance} & \colhead{$A_V$} & \colhead{Reference(s)} \\
+    \colhead{Name} & \colhead{} & \colhead{$\alpha$, $\delta$ (J2000)} & 
     \colhead{Epochs} & \colhead{[days]} & 
     \colhead{[days]} & \colhead{[days]} & 
-    \colhead{} & \colhead{[Mpc]} & \colhead{[mag]} & 
-    \colhead{Morph.} & \colhead{}
+    \colhead{} & \colhead{[Mpc]} & \colhead{[mag]} & \colhead{}
 }
 \startdata
 ===
 \enddata
+\tablenotetext{a}{Offset between NED entry and \galex sky coordinates is larger
+    than 30 kpc}
+\tablenotetext{b}{Redshift-independent distance from \citet{Tully2016-Cosmicflows3}}
 \tablecomments{Discovery dates were retrieved from the Open Supernova Catalog; 
 redshift, Hubble distance, extinction, and host morphology were retrieved from NED.}
 \end{deluxetable*}

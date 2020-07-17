@@ -28,13 +28,6 @@ NED_RESULTS_FILE = Path('ref/ned.csv')
 COSMIC_FLOWS_FILE = Path('ref/qualityDistances.csv')
 HYPERLEDA_FILE = Path('ref/hyperleda.info.cgi')
 
-"""
-SN note codes
-====
-a : large host offset
-b : redshift-independent distance preferred
-"""
-
 
 def main():
 
@@ -299,9 +292,6 @@ def combine_sn_info(ned, sn_info):
     if 'z_indep_dist' in ned.columns:
         ned.drop(columns=['z_indep_dist'], inplace=True)
 
-    # Reset notes column
-    sn_info['notes'] = np.full(len(sn_info.index), '')
-
     # Select NED entries that exist in sn_info
     ned_select = ned.loc[ned.index.isin(sn_info.index)]
     # Select sn_info entries that exist in NED
@@ -311,8 +301,6 @@ def combine_sn_info(ned, sn_info):
     sn_info.index.set_names('name', inplace=True)
     # Remove duplicate column names
     sn_info = sn_info.loc[:,~sn_info.columns.duplicated()]
-    # Flag SNe with physical sep > 30 kpc
-    sn_info.loc[sn_info['offset'] > 30, 'notes'] += 'a'
     # Add CosmicFlows3 z-independent distances
     sn_info = add_cf3(sn_info)
     # Remove entries w/o ned or cf3
@@ -353,7 +341,6 @@ def add_cf3(sn_info):
             sn_info['z_indep_dist_err'], sn_info['h_dist_err'])
     sn_info['pref_dist_ref'] = np.where(pd.notna(sn_info['z_indep_dist']), 
             sn_info['z_indep_ref'], sn_info['z_ref'])
-    sn_info.loc[pd.notna(sn_info['z_indep_dist']), 'notes'] += 'b'
 
     return sn_info
 

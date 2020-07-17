@@ -21,7 +21,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tkr
 
-import utils
+from utils import *
 
 FITS_INFO_FILE = Path('ref/fits_info.csv')
 SN_INFO_FILE = 'ref/sn_info.csv'
@@ -41,7 +41,7 @@ def main():
     warnings.simplefilter('ignore', category=AstropyWarning)
 
     # Read Open Supernova Catalog
-    osc = utils.import_osc()
+    osc = pd.read_csv(OSC_FILE, index_col='Name')
     
     # Option to overwrite or keep
     overwrite = True
@@ -51,20 +51,20 @@ def main():
 
     if overwrite:
         # Get all FITS file paths
-        fits_files = utils.get_fits_files(args.fits_dir, osc)
+        fits_files = get_fits_files(args.fits_dir, osc)
         # Import all FITS files
         fits_info = compile_fits(fits_files, osc)
-        utils.output_csv(fits_info, FITS_INFO_FILE, index=False)
+        output_csv(fits_info, FITS_INFO_FILE, index=False)
     else:
         fits_info = pd.read_csv(FITS_INFO_FILE)
 
     # Select only those with before+after observations
     final_sample = get_final_sample(fits_info) 
-    utils.output_csv(final_sample, 'ref/sample_fits_info.csv')
+    output_csv(final_sample, 'ref/sample_fits_info.csv')
 
     # Output compressed CSV without SN name duplicates
     sn_info = compress_duplicates(final_sample.copy())
-    utils.output_csv(sn_info, SN_INFO_FILE)
+    output_csv(sn_info, SN_INFO_FILE)
 
     # Plot histogram of observations
     plot_observations(fits_info, final_sample)
@@ -85,9 +85,9 @@ def import_fits(fits_file, osc):
     """
 
     try:
-        f = utils.Fits(fits_file)
-        sn_name = utils.fits2sn(fits_file, osc)
-        sn = utils.SN(sn_name, osc)
+        f = Fits(fits_file)
+        sn_name = fits2sn(fits_file, osc)
+        sn = SN(sn_name, osc)
     except KeyError:
         # Skip if SN isn't found in reference info, or FITS file is incomplete
         return None
@@ -215,17 +215,17 @@ def plot_observations(fits_info, final_sample):
 
     print('\nPlotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
-    colors = ['m', 'b']
 
     fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05}, figsize=(7,5))
     fig.set_tight_layout(True)
 
-    for ax, band, color in zip(axes, bands, colors):
+    for ax, band in zip(axes, bands):
         df = fits_info[fits_info['Band'] == band]
         epochs = df['Total Epochs']
         both = df[(df['Epochs Post-SN'] > 0) & (df['Epochs Pre-SN'] > 0)]['Total Epochs']
 
         bins = np.logspace(0, np.log10(np.max(epochs)), 11)
+        color = COLORS[band]
         ax.hist(epochs, bins=bins, histtype='step', align='left', color=color,
                 label='all SNe')
         ax.hist(both, bins=bins, histtype='stepfilled', align='left', color=color,

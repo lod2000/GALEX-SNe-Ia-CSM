@@ -14,7 +14,7 @@ from astropy import units as u
 from pathlib import Path
 from time import sleep
 import matplotlib.pyplot as plt
-import utils
+from utils import *
 
 C = 3.e5 # km/s
 H_0 = 70. # km/s/Mpc
@@ -32,7 +32,7 @@ HYPERLEDA_FILE = Path('ref/hyperleda.info.cgi')
 def main():
 
     sn_info = pd.read_csv(SN_INFO_FILE, index_col='name')
-    osc = utils.import_osc()
+    osc = pd.read_csv(OSC_FILE, index_col='Name')
 
     prev = 'o'
     if NED_RESULTS_FILE.is_file():
@@ -58,11 +58,11 @@ def main():
         except requests.exceptions.ConnectionError:
             print('Request for %s timed out.' % sn)
         if i % 10 == 0:
-            utils.output_csv(ned, NED_RESULTS_FILE)
+            output_csv(ned, NED_RESULTS_FILE)
 
     # Combine sn_info and ned
     sn_info = combine_sn_info(ned, sn_info)
-    utils.output_csv(sn_info, SN_INFO_FILE)
+    output_csv(sn_info, SN_INFO_FILE)
 
     plot_redshifts(sn_info)
 
@@ -314,7 +314,8 @@ def combine_sn_info(ned, sn_info):
 def add_cf3(sn_info):
 
     cf3 = pd.read_csv(COSMIC_FLOWS_FILE, sep='\s*,\s*', index_col='name', 
-            usecols=['name', 'pgc', 'DM', 'eDM'], skipinitialspace=True)
+            usecols=['name', 'pgc', 'DM', 'eDM'], skipinitialspace=True, 
+            engine='python')
     cf3.drop_duplicates(inplace=True)
     cf3['dist_mpc'] = 10 ** (1/5 * (cf3['DM'] + 5)) * 1e-6
     cf3['dist_err_mpc'] = cf3['dist_mpc'] * 1/5 * np.log(10) * cf3['eDM'] * 1e-6
@@ -347,7 +348,8 @@ def add_cf3(sn_info):
 
 def add_hyperleda(sn_info):
 
-    hyperleda = pd.read_csv('ref/hyperleda.info.cgi', sep='\s+\|\s', index_col='name', skipinitialspace=True)
+    hyperleda = pd.read_csv('ref/hyperleda.info.cgi', sep='\s+\|\s', 
+            index_col='name', skipinitialspace=True, engine='python')
     hyperleda.replace(None, np.nan, inplace=True, regex='\s+\|')
     hyperleda.drop_duplicates(inplace=True)
     hyperleda_bibref = '2014A&A...570A..13M'

@@ -8,7 +8,6 @@ from astropy.time import Time
 import matplotlib.markers as mmarkers
 import matplotlib.colors as mcolors
 from utils import *
-from lc_utils import *
 from tqdm import tqdm
 import argparse
 

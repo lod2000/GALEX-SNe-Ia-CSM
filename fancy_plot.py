@@ -4,7 +4,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
-from lc_utils import *
 from utils import *
 import argparse
 from pathlib import Path

@@ -161,6 +161,7 @@ def swift_cps2flux(cps, cps_err, band):
     flux_err = flux * np.sqrt((cps_err/cps)**2 + (c_err/c)**2)
     return flux, flux_err
 
+
 def absolute_luminosity(flux, dist):
     """
     Converts measured fluxes to absolute luminosities based on distance
@@ -226,7 +227,7 @@ def absolute_mag_err(mag, mag_err, dist, dist_err):
 
 
 ################################################################################
-## Light curve functions
+## Light curve data
 ################################################################################
 
 def check_if_empty(lc, sn, band):
@@ -531,7 +532,7 @@ def import_swift_lc(sn, sn_info):
 
 
 ################################################################################
-## Importing data
+## FITS data
 ################################################################################
 
 def get_fits_files(fits_dir, osc=[]):
@@ -550,13 +551,6 @@ def get_fits_files(fits_dir, osc=[]):
     if len(osc) > 0:
         fits_list = [f for f in fits_list if fits2sn(f, osc) in osc.index]
     return fits_list
-
-
-# Import Open Supernova Catalog csv file
-def import_osc(osc_csv=''):
-    if osc_csv == '':
-        osc_csv = OSC_FILE
-    return pd.read_csv(osc_csv, index_col='Name')
 
 
 # Convert FITS file name to SN name, as listed in OSC sheet

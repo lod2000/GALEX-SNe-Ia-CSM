@@ -29,7 +29,7 @@ for i, f in enumerate(files):
         y = y/(np.pi * aper_rad[telescope]**2)
 
     ax.plot(freq, y*100, label=label, linestyle=style[telescope], alpha=alpha[telescope],
-            color=colors[band])
+            color=COLORS[band])
 
 ax.set_xlabel('Wavelength [Å]')
 ax.set_xlim((1200, 3300))

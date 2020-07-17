@@ -75,7 +75,7 @@ def main():
     #     # lc['group'] = ((lc['t_delta'] + 3100) / 365).astype(int)
     #     group_max = [lc[lc['group'] == g]['luminosity_hostsub_err'].max() for g in np.arange(17)]
     #     ax.scatter(lc['t_delta'], lc['luminosity_hostsub_err'] * args.sigma, 
-    #             marker=11, color=colors[band], s=20, alpha=0.1)
+    #             marker=11, color=COLORS[band], s=20, alpha=0.1)
 
     # print('Plotting detections...')
     # for lc in tqdm(detections):
@@ -138,7 +138,7 @@ def detect_sn(sn, sn_info, args):
         if make_plot:
             # Plot data from this band
             fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, args,
-                    color=colors[band], detections=detections)
+                    color=COLORS[band], detections=detections)
             # Figure out best x limits
             xmin = min((xmin, np.min(lc['t_delta'])))
             xmax = max((xmax, np.max(lc['t_delta'])))

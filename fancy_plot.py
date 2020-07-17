@@ -85,7 +85,7 @@ def plot(sn, sn_info, args):
 
     # Plot points after discovery
     for lc, band in zip(data, bands):
-        color = colors[band]
+        color = COLORS[band]
         after = lc[(lc['t_delta'] > DT_MIN) & (lc['t_delta'] < args.max)]
 
         # Systematics
@@ -112,7 +112,7 @@ def plot(sn, sn_info, args):
         before = lc[lc['t_delta'] <= DT_MIN]
         before_t = [xmin] * len(before.index)
         ax.scatter(before_t, before['flux_bgsub'] * yscale, marker='<', s=15,
-                c=colors[band], label='%s host (%s)' % (band, len(before.index)))
+                c=COLORS[band], label='%s host (%s)' % (band, len(before.index)))
 
     # Configure plot
     ax.set_xlabel('Time since discovery [days]')
@@ -151,8 +151,8 @@ def plot_swift(ax, sn, sn_info, yscale, args):
         data = lc[lc['band'] == band]
         ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
                 yerr=data['flux_err'] * yscale, marker='D', ms=4, label=band,
-                elinewidth=1, markeredgecolor=colors[band], markerfacecolor='white',
-                ecolor=colors[band])
+                elinewidth=1, markeredgecolor=COLORS[band], markerfacecolor='white',
+                ecolor=COLORS[band])
     return ax
 
 
@@ -165,7 +165,7 @@ def plot_panstarrs(ax, sn, sn_info, yscale, args):
         data = lc[lc['filterID'] == i]
         ax.errorbar(data['t_delta'], data['apFlux_cgs'] * yscale, 
                 yerr=data['apFluxErr_cgs'] * yscale, marker='*', ms=4, 
-                label=bands[i-1], elinewidth=1, color=colors[bands[i-1]],
+                label=bands[i-1], elinewidth=1, color=COLORS[bands[i-1]],
                 linestyle='none')
     return ax
 

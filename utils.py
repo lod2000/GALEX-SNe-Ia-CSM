@@ -6,16 +6,34 @@ from astropy.time import Time
 from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.wcs import WCS
+from statsmodels.stats.weightstats import DescrStatsW
 
-OSC_FILE = Path('ref/osc.csv')
+# Default file and directory paths
+LC_DIR = Path('/mnt/d/GALEXdata_v10/LCs/')      # light curve data dir
+FITS_DIR = Path('/mnt/d/GALEXdata_v10/fits/')   # FITS data dir
+OSC_FILE = Path('ref/osc.csv')                  # Open Supernova Catalog file
+EXTERNAL_LC_DIR = Path('external/')             # light curves from Swift / others
+BG_FILE = Path('out/high_bg.csv')               # discarded data with high background
+EMPTY_LC_FILE = Path('out/empty_lc.csv')        # SNe with no useful lc data
+
+# Variable cut parameters
+DETRAD_CUT = 0.55   # Detector radius above which to cut (deg)
+DT_MIN = -30        # Separation between background and SN data (days)
+
+# GALEX spacecraft info
+PLATE_SCALE = 6 # (as/pixel)
 
 # Plot color palette
-colors = {'FUV' : '#a37', 'NUV' : '#47a', # GALEX
+COLORS = {'FUV' : '#a37', 'NUV' : '#47a', # GALEX
           'UVW1': '#cb4', 'UVM2': '#283', 'UVW2': '#6ce', # Swift
           'F275W': '#e67', # Hubble
           'g': 'c', 'r': 'r', 'i': 'y', 'z': 'brown', 'y': 'k' # Pan-STARRS
           }
 
+
+################################################################################
+## General utilities
+################################################################################
 
 def output_csv(df, file, **kwargs):
     """
@@ -37,22 +55,95 @@ def output_csv(df, file, **kwargs):
         df.to_csv(tmp_file, **kwargs)
 
 
+################################################################################
+## Conversions
+################################################################################
+
+"""
+All conversion functions are designed to accept either float or NumPy array-like
+inputs, as long as all input arrays have the same shape. The 'band' should be a
+string or array of strings, matching one of the keys of the below conversion
+factors.
+"""
+
 # https://asd.gsfc.nasa.gov/archive/galex/FAQ/counts_background.html
-def galex_ab_mag(cps, band):
-    const = 18.82 if band=='FUV' else 20.08
-    return -2.5 * np.log10(cps) + const
+GALEX_ZERO_POINT    = {'FUV': 18.82, 'NUV': 20.08}
+GALEX_FLUX_FACTOR   = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
+# Poole et al. 2007
+SWIFT_ZERO_POINT    = {'V': 17.89, 'B': 19.11, 'U': 18.34, 'UVW1': 17.49, 
+                       'UVM2': 16.82, 'UVW2': 17.35}
+SWIFT_ZERO_ERROR    = {'V': 0.013, 'B': 0.016, 'U': 0.020, 'UVW1': 0.03, 
+                       'UVM2': 0.03, 'UVW2': 0.03}
+SWIFT_FLUX_FACTOR   = {'V': 2.614e-16, 'B': 1.472e-16, 'U': 1.63e-16, 
+                       'UVW1': 4.3e-16, 'UVM2': 7.5e-16, 'UVW2': 6.0e-16}
+SWIFT_FLUX_ERROR    = {'V': 8.7e-19, 'B': 5.7e-19, 'U': 2.5e-18,
+                       'UVW1': 2.1e-17, 'UVM2': 1.1e-16, 'UVW2': 6.4e-17}
+# Breeveld et al. 2011
+SWIFT_AB_CONVERSION = {'V':-0.01, 'B':-0.13, 'U': 1.02, 'UVW1': 1.51, 
+                       'UVM2': 1.69, 'UVW2': 1.73}
+SWIFT_AB_CONV_ERROR = {'V': 0.01, 'B': 0.02, 'U': 0.02, 'UVW1': 0.03, 
+                       'UVM2': 0.03, 'UVW2': 0.03}
 
 
-def galex_flux(cps, band):
-    factor = 1.4e-15 if band=='FUV' else 2.06e-16
-    return factor * cps
+def galex_cps2flux(cps, band):
+    # Converts GALEX CPS to flux values
+    return np.vectorize(GALEX_FLUX_FACTOR.get)(band) * cps
+
+
+def galex_cps2mag(cps, band):
+    # Converts GALEX CPS to AB magnitudes
+    return -2.5 * np.log10(cps) + np.vectorize(GALEX_ZERO_POINT.get)(band)
+
+
+def galex_flux2mag(flux, band):
+    # Converts fluxes from GALEX to AB magnitudes
+    cps = flux / np.vectorize(GALEX_FLUX_FACTOR.get)(band)
+    return galex_cps2mag(cps, band)
+
+
+def galex_mag2cps_err(mag, mag_err, band):
+    # Converts AB magnitudes measured by GALEX into flux
+    cps = 10 ** (2/5 * (np.vectorize(GALEX_ZERO_POINT.get)(band) - mag))
+    cps_err = cps * (2/5) * np.log(10) * mag_err
+    return cps, cps_err
 
 
 def galex_delta_mag(cps, band, exp_time):
+    # Estimates photometric repeatability vs magnitudes based on GALEX counts
     factor = 0.05 if band=='FUV' else 0.027
     return -2.5 * (np.log10(cps) - np.log10(cps + np.sqrt(cps * exp_time + \
             (factor * cps * exp_time) ** 2) / exp_time))
 
+
+def swift_vega2ab(vega_mag, vega_mag_err, band):
+    # Converts Vega magnitudes from Swift to AB magnitudes
+    conv = np.vectorize(SWIFT_AB_CONVERSION.get)(band)
+    conv_err = np.vectorize(SWIFT_AB_CONV_ERROR.get)(band)
+    ab_mag_err = np.sqrt(vega_mag_err**2 + conv_err**2)
+    return vega_mag + conv, ab_mag_err
+
+
+def swift_mag2cps(mag, mag_err, band):
+    # Converts Swift AB magnitudes to CPS
+    diff = np.vectorize(SWIFT_ZERO_POINT.get)(band) - mag
+    diff_err = np.sqrt(mag_err**2 + np.vectorize(SWIFT_ZERO_ERROR.get)(band)**2)
+    cps = 10 ** (2/5 * diff)
+    cps_err = cps * (2/5) * np.log(10) * diff_err
+    return cps, cps_err
+
+
+def swift_cps2flux(cps, cps_err, band):
+    # Converts Swift CPS to flux values
+    c = np.vectorize(SWIFT_FLUX_FACTOR.get)(band)
+    c_err = np.vectorize(SWIFT_FLUX_ERROR.get)(band)
+    flux = cps * c
+    flux_err = flux * np.sqrt((cps_err/cps)**2 + (c_err/c)**2)
+    return flux, flux_err
+
+
+################################################################################
+## Importing data
+################################################################################
 
 def get_fits_files(fits_dir, osc=[]):
     """

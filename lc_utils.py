@@ -1,18 +1,7 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from astropy.time import Time
-import utils
-from statsmodels.stats.weightstats import DescrStatsW
-
-LC_DIR = Path('/mnt/d/GALEXdata_v10/LCs/')
-FITS_DIR = Path('/mnt/d/GALEXdata_v10/fits/')
-EXTERNAL_LC_DIR = Path('external/')
-BG_FILE = Path('out/high_bg.csv')
-EMPTY_LC_FILE = Path('out/empty_lc.csv')
-DETRAD_CUT = 0.55 # deg
-DT_MIN = -30
-PLATE_SCALE = 6 # as/pixel
+from utils import *
 
 
 def absolute_luminosity(flux, dist):
@@ -90,7 +79,7 @@ def check_if_empty(lc, sn, band):
         if EMPTY_LC_FILE.is_file():
             empty_lc = pd.read_csv(EMPTY_LC_FILE).append(empty_lc)
             empty_lc.drop_duplicates(inplace=True)
-        utils.output_csv(empty_lc, EMPTY_LC_FILE, index=False)
+        output_csv(empty_lc, EMPTY_LC_FILE, index=False)
         raise KeyError
 
 
@@ -133,36 +122,6 @@ def full_import(sn, band, sn_info):
             lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
 
     return lc, bg, bg_err, sys_err
-
-
-def galex_flux2mag(flux, band):
-    """
-    Converts fluxes from GALEX to AB magnitudes
-    """
-
-    zero_point = {'FUV': 18.82, 'NUV': 20.08}
-    factor = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
-    return -2.5 * np.log10(flux / np.vectorize(factor.get)(band)) + np.vectorize(zero_point.get)(band)
-
-
-def galex_mag2cps(mag, mag_err, band):
-    """
-    Converts AB magnitudes measured by GALEX into flux
-    """
-
-    zero_point = {'FUV': 18.82, 'NUV': 20.08}
-    cps = 10 ** (2/5 * (np.vectorize(zero_point.get)(band) - mag))
-    cps_err = cps * (2/5) * np.log(10) * mag_err
-    return cps, cps_err
-
-
-def galex_cps2flux(cps, band):
-    """
-    Converts GALEX CPS to flux values
-    """
-
-    conversion = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
-    return np.vectorize(conversion.get)(band) * cps
 
 
 def gAper_sys_err(mag, band):
@@ -218,7 +177,7 @@ def get_background(lc, band):
             bg = weighted_stats.mean
             bg_err = np.sqrt(weighted_stats.std**2 + sys_err**2)
             # Reduced chi squared test of data vs background
-            rcs = utils.redchisquare(data, np.full(data.size, bg), new_err, n=0)
+            rcs = redchisquare(data, np.full(data.size, bg), new_err, n=0)
 
     # For few background points, use the polynomial fit of |MCAT - gAper| errors
     # based on the original gAperture (non-background-subtracted) magnitudes
@@ -283,7 +242,7 @@ def get_flags(sn, band):
     """
 
     # Get name of light curve file
-    fits_name = utils.sn2fits(sn, band)
+    fits_name = sn2fits(sn, band)
     lc_file = LC_DIR / Path(fits_name.split('.')[0] + '.csv')
     # Read light curve data
     lc = pd.read_csv(lc_file)
@@ -306,7 +265,7 @@ def import_lc(sn, band):
     """
 
     # Get name of light curve file
-    fits_name = utils.sn2fits(sn, band)
+    fits_name = sn2fits(sn, band)
     lc_file = LC_DIR / Path(fits_name.split('.')[0] + '.csv')
 
     # Read light curve data
@@ -349,7 +308,7 @@ def import_lc(sn, band):
         if BG_FILE.is_file():
             high_bg = pd.read_csv(BG_FILE, index_col=0).append(high_bg)
             high_bg.drop_duplicates(inplace=True)
-        utils.output_csv(high_bg, BG_FILE, index=True)
+        output_csv(high_bg, BG_FILE, index=True)
         lc = lc[lc['bg_counts'] < 3 * bg_median]
 
     # Add manual cuts (e.g. previously identified as a ghost image)
@@ -423,46 +382,3 @@ def import_swift_lc(sn, sn_info):
             lc['flux'], lc['flux_err'], dist, dist_err)
 
     return lc
-
-
-def swift_vega2ab(vega_mag, vega_mag_err, band):
-    """
-    Converts Vega magnitudes from Swift to AB magnitudes, based on the band;
-    conversion values from Breeveld et al. 2011
-    Inputs:
-        vega_mag (float or Array): Swift Vega magnitude
-        vega_mag_err (float or Array): Swift Vega magnitude error
-        band (str or Array): UVW1, UVM2, or UVW2
-    """
-
-    conversion = {'V':-0.01, 'B':-0.13, 'U': 1.02, 'UVW1': 1.51, 'UVM2': 1.69, 'UVW2': 1.73}
-    conv_error = {'V': 0.01, 'B': 0.02, 'U': 0.02, 'UVW1': 0.03, 'UVM2': 0.03, 'UVW2': 0.03}
-    const = np.vectorize(conversion.get)(band)
-    ab_mag_err = np.sqrt(vega_mag_err**2 + np.vectorize(conv_error.get)(band)**2)
-    return vega_mag + const, ab_mag_err
-
-
-def swift_mag2cps(mag, mag_err, band):
-    # Zero points from Poole et al. 2007
-    zero_point = {'V': 17.89, 'B': 19.11, 'U': 18.34, 'UVW1': 17.49, 
-            'UVM2': 16.82, 'UVW2': 17.35}
-    zpt_err = {'V': 0.013, 'B': 0.016, 'U': 0.020, 'UVW1': 0.03, 'UVM2': 0.03,
-            'UVW2': 0.03}
-    diff = np.vectorize(zero_point.get)(band) - mag
-    diff_err = np.sqrt(mag_err ** 2 + np.vectorize(zpt_err.get)(band) ** 2)
-    cps = 10 ** (2/5 * diff)
-    cps_err = cps * (2/5) * np.log(10) * diff_err
-    return cps, cps_err
-
-
-def swift_cps2flux(cps, cps_err, band):
-    # Conversion values from Poole et al. 2007
-    conversion = {'V': 2.614e-16, 'B': 1.472e-16, 'U': 1.63e-16, 
-            'UVW1': 4.3e-16, 'UVM2': 7.5e-16, 'UVW2': 6.0e-16}
-    conv_error = {'V': 8.7e-19, 'B': 5.7e-19, 'U': 2.5e-18, 'UVW1': 2.1e-17, 
-            'UVM2': 1.1e-16, 'UVW2': 6.4e-17}
-    c = np.vectorize(conversion.get)(band)
-    c_err = np.vectorize(conv_error.get)(band)
-    flux = cps * c
-    flux_err = flux * np.sqrt((cps_err/cps)**2 + (c_err/c)**2)
-    return flux, flux_err

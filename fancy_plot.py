@@ -5,13 +5,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from lc_utils import *
+from utils import *
 import argparse
 from pathlib import Path
-
-colors = {'FUV' : 'm', 'NUV' : 'b', # GALEX
-          'UVW1': 'maroon', 'UVM2': 'orange', 'UVW2': 'g', # Swift
-          'g': 'c', 'r': 'r', 'i': 'y', 'z': 'brown', 'y': 'k' # Pan-STARRS
-          }
 
 
 def main():
@@ -97,7 +93,7 @@ def plot(sn, sn_info, args):
 
         # Plot background average of epochs before discovery
         bg_alpha = 0.2
-        plt.axhline(bg * yscale, 0, 1, color=color, alpha=0.5, linestyle='--', 
+        plt.axhline(bg * yscale, 0, 1, color=color, alpha=0.7, linestyle='--', 
                 linewidth=1)
         plt.axhspan(ymin=(bg - args.sigma * bg_err) * yscale, 
                 ymax=(bg + args.sigma * bg_err) * yscale, 
@@ -106,7 +102,7 @@ def plot(sn, sn_info, args):
         # Plot fluxes
         ax.errorbar(after['t_delta'], after['flux_bgsub'] * yscale, 
                 yerr=after['flux_bgsub_err_total'] * yscale, linestyle='none', 
-                marker='o', ms=5,
+                marker='o', ms=5, alpha=1,
                 elinewidth=1, c=color, label=band
         )
 
@@ -128,7 +124,7 @@ def plot(sn, sn_info, args):
     # Add legend
     handles, labels = ax.get_legend_handles_labels()
     # Greyscale line, and patch for host background flux
-    bg_line = mlines.Line2D([], [], color='k', linestyle='--', alpha=0.5,
+    bg_line = mlines.Line2D([], [], color='k', linestyle='--', alpha=0.7,
             label='host mean', linewidth=1)
     bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % args.sigma)
     # Add handles from fluxes
@@ -155,7 +151,8 @@ def plot_swift(ax, sn, sn_info, yscale, args):
         data = lc[lc['band'] == band]
         ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
                 yerr=data['flux_err'] * yscale, marker='D', ms=4, label=band,
-                elinewidth=1, color=colors[band])
+                elinewidth=1, markeredgecolor=colors[band], markerfacecolor='white',
+                ecolor=colors[band])
     return ax
 
 

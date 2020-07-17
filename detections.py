@@ -7,7 +7,7 @@ from pathlib import Path
 from astropy.time import Time
 import matplotlib.markers as mmarkers
 import matplotlib.colors as mcolors
-import utils
+from utils import *
 from lc_utils import *
 from tqdm import tqdm
 import argparse
@@ -17,8 +17,6 @@ from itertools import repeat
 from functools import partial
 
 bands = ['FUV', 'NUV']
-colors = {'FUV': 'm', 'NUV': 'b'}
-styles = {'FUV': 'D', 'NUV': 'o'}
 np.seterr(all='warn')
 
 
@@ -65,7 +63,7 @@ def main():
     detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
     detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 
             'Max Sigma', 'Background', 'Background Error', 'Systematic Error'])
-    utils.output_csv(detected_sne, 'out/detections.csv', index=False)
+    output_csv(detected_sne, 'out/detections.csv', index=False)
 
     # Limit plot
     # fig = plt.figure(figsize=(11, 7))
@@ -84,7 +82,7 @@ def main():
     #     sn = lc['name'].iloc[0]
     #     band = lc['band'].iloc[0]
     #     ax.errorbar(lc['t_delta'], lc['luminosity_hostsub'], linestyle='none', 
-    #             yerr=lc['luminosity_hostsub_err'], marker=styles[band], ms=4, 
+    #             yerr=lc['luminosity_hostsub_err'], ms=4, 
     #             elinewidth=1, label='%s (%s)' % (sn, band))
 
     # ax.set_xlim((DT_MIN, None))
@@ -140,7 +138,7 @@ def detect_sn(sn, sn_info, args):
         if make_plot:
             # Plot data from this band
             fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, args,
-                    color=colors[band], marker=styles[band], detections=detections)
+                    color=colors[band], detections=detections)
             # Figure out best x limits
             xmin = min((xmin, np.min(lc['t_delta'])))
             xmax = max((xmax, np.max(lc['t_delta'])))

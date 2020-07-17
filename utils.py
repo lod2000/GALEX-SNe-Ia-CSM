@@ -9,6 +9,13 @@ from astropy.wcs import WCS
 
 OSC_FILE = Path('ref/osc.csv')
 
+# Plot color palette
+colors = {'FUV' : '#a37', 'NUV' : '#47a', # GALEX
+          'UVW1': '#cb4', 'UVM2': '#283', 'UVW2': '#6ce', # Swift
+          'F275W': '#e67', # Hubble
+          'g': 'c', 'r': 'r', 'i': 'y', 'z': 'brown', 'y': 'k' # Pan-STARRS
+          }
+
 
 def output_csv(df, file, **kwargs):
     """

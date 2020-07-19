@@ -27,6 +27,8 @@ def main():
             help='output directory', metavar='dir')
     parser.add_argument('-e', '--external', action='store_true',
             help='also plot external light curves')
+    parser.add_argument('-l', '--log', action='store_true',
+            help='plot light curves in log(flux)')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(args.info, index_col='name')
@@ -67,8 +69,12 @@ def plot(sn, sn_info, args):
 
     # Get largest flux exponent
     fluxes = np.concatenate([lc['flux_bgsub'].to_numpy() for lc in data])
-    flux_exp = int(np.log10(np.max(fluxes))) - 1
-    yscale = 1 / (10**flux_exp)
+    if args.log:
+        flux_exp = 0
+        yscale = 1
+    else:
+        flux_exp = int(np.log10(np.max(fluxes))) - 1
+        yscale = 1 / (10**flux_exp)
 
     # Plot external light curves (e.g. Swift)
     if args.external:
@@ -115,10 +121,16 @@ def plot(sn, sn_info, args):
 
     # Configure plot
     ax.set_xlabel('Time since discovery [days]')
-    ax.set_ylabel('Flux [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp)
-    ax.ticklabel_format(useOffset=False)
+    if args.log:
+        flux_exp_text = ''
+        ax.set_yscale('log')
+    else:
+        flux_exp_text = '$10^{%s}$ ' % flux_exp
+        ax.ticklabel_format(useOffset=False)
+    ax.set_ylabel('Flux [%serg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp_text)
     ax.set_title(sn)
     ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
+    print(ylim_flux)
 
     # Add legend
     handles, labels = ax.get_legend_handles_labels()
@@ -127,15 +139,23 @@ def plot(sn, sn_info, args):
             label='host mean', linewidth=1)
     bg_patch = mpatches.Patch(color='k', alpha=bg_alpha, label='host %sσ' % args.sigma)
     # Add handles from fluxes
-    plt.legend(handles=[bg_line, bg_patch] + handles, ncol=3, 
+    ncol = 2 if len(handles) < 4 else 3
+    plt.legend(handles=[bg_line, bg_patch] + handles, ncol=ncol, 
             loc='best', handletextpad=0.5, handlelength=1.2)
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()
     ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'pref_dist'])
-    luminosity_exp = int(np.log10(max(ylim_luminosity)))
-    luminosity_ax.set_ylim(ylim_luminosity / (10**luminosity_exp))
-    luminosity_ax.set_ylabel('Luminosity [$10^{%s}$ erg s$^{-1}$ Å$^{-1}$]' % luminosity_exp, 
+    if args.log:
+        luminosity_ax.set_yscale('log')
+        luminosity_ax.set_ylim(ylim_luminosity)
+        luminosity_exp_text = ''
+    else:
+        luminosity_exp = int(np.log10(max(ylim_luminosity)))
+        luminosity_ax.set_ylim(ylim_luminosity / (10**luminosity_exp))
+        luminosity_exp_text = '$10^{%s}$ ' % luminosity_exp
+    
+    luminosity_ax.set_ylabel('Luminosity [%serg s$^{-1}$ Å$^{-1}$]' % luminosity_exp_text, 
             rotation=270, labelpad=24)
 
     plt.savefig(args.output / Path('%s.png' % sn), dpi=300)

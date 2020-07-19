@@ -5,8 +5,8 @@ import pandas as pd
 # import statistics
 # from astropy.coordinates import SkyCoord
 
-INPUT_FILE = 'OSC-pre2014-v2.csv'
-OUTPUT_FILE = 'osc-pre2014-v2-clean.csv'
+INPUT_FILE = 'OSC-pre2014-v3.csv'
+OUTPUT_FILE = 'osc-pre2014-v3-clean.csv'
 
 # Fix odd cases where R.A. or Dec. have 'AM' or 'PM' appended
 # ang: string in format 'HH:MM:SS' or 'Deg:Min:Sec'

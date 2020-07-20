@@ -111,7 +111,7 @@ def detect_sn(sn, sn_info, args):
         # Import light curve
         try:
             lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
-        except (FileNotFoundError, KeyError, IndexError):
+        except (FileNotFoundError, KeyError, IndexError, pd.errors.EmptyDataError):
             continue
 
         # Host background & systematic error

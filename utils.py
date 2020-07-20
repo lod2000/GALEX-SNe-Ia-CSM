@@ -586,13 +586,13 @@ class SN:
         max_date = osc.loc[name, 'Max Date']
         if pd.notna(max_date):
             self.max_date = Time(str(max_date), format='iso', out_subfmt='date')
-        self.mmax = osc.loc[name, 'mmax']
+        # self.mmax = osc.loc[name, 'mmax']
         self.host = osc.loc[name, 'Host Name']
         self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
         self.dec = Angle(osc.loc[name, 'Dec.'] + ' deg')
         self.z = osc.loc[name, 'z']
         self.type = osc.loc[name, 'Type']
-        self.oscs = osc.loc[name, 'References'].split(',')
+        self.refs = osc.loc[name, 'References'].split(',')
 
 
 class Fits:

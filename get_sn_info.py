@@ -267,7 +267,7 @@ def plot_redshifts(ned, bin_width=0.025):
     z = z[pd.notna(z)].astype(float)
     bins = int((max(z) - min(z)) / bin_width)
     fig, ax = plt.subplots()
-    plt.hist(z, bins=bins, histtype='stepfilled', color='r', alpha=0.8)
+    plt.hist(z, bins=bins, histtype='bar', color='#e67', rwidth=0.95)
     fig.set_tight_layout(True)
     plt.xlabel('z')
     plt.ylabel('Number of SNe')

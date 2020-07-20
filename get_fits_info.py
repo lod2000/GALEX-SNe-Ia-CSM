@@ -33,8 +33,10 @@ def main():
     # Parse arguments for: fits file parent directory, SN reference info
     parser = argparse.ArgumentParser(description='Classify FITS images by \
             relative timing to SN discovery date.')
-    parser.add_argument('fits_dir', metavar='dir', type=Path, help='path to \
-            FITS data directory')
+    # parser.add_argument('fits_dir', metavar='dir', type=Path, help='path to \
+    #         FITS data directory')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+            help='re-generate FITS info file and overwrite existing')
     args = parser.parse_args()
 
     # Suppress Astropy warnings about "dubious years", etc.
@@ -44,14 +46,14 @@ def main():
     osc = pd.read_csv(OSC_FILE, index_col='Name')
     
     # Option to overwrite or keep
-    overwrite = True
-    if FITS_INFO_FILE.is_file():
-        over_in = input('Previous FITS info file detected. Overwrite? [y/N] ')
-        overwrite = (over_in == 'y')
+    # overwrite = True
+    # if FITS_INFO_FILE.is_file():
+    #     over_in = input('Previous FITS info file detected. Overwrite? [y/N] ')
+    #     overwrite = (over_in == 'y')
 
-    if overwrite:
+    if args.overwrite or not FITS_INFO_FILE.is_file():
         # Get all FITS file paths
-        fits_files = get_fits_files(args.fits_dir, osc)
+        fits_files = get_fits_files(FITS_DIR, osc)
         # Import all FITS files
         fits_info = compile_fits(fits_files, osc)
         output_csv(fits_info, FITS_INFO_FILE, index=False)
@@ -101,7 +103,7 @@ def import_fits(fits_file, osc):
     else:
         min_post = np.nan
 
-    return [sn.name, sn.disc_date.iso, sn.max_date.iso, f.band,
+    return [sn.name, sn.disc_date.iso, f.band,
             f.ra.to_string(unit=u.hour), f.dec.to_string(unit=u.degree), 
             f.epochs, pre, post, int(sn.disc_date.mjd - f.tmeans[0].mjd), 
             int(f.tmeans[-1].mjd - sn.disc_date.mjd), min_post, f.filename,
@@ -129,7 +131,7 @@ def compile_fits(fits_files, osc):
     # Remove empty entries
     stats = list(filter(None, stats))
 
-    fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Max Date', 'Band',
+    fits_info = pd.DataFrame(np.array(stats), columns=['Name', 'Disc. Date', 'Band',
             'R.A.', 'Dec.', 'Total Epochs', 'Epochs Pre-SN', 'Epochs Post-SN', 
             'First Epoch', 'Last Epoch', 'Next Epoch', 'File', 'Host Name'])
     fits_info = fits_info.astype({'Total Epochs':int, 'Epochs Pre-SN':int, 'Epochs Post-SN':int})
@@ -165,10 +167,10 @@ def compress_duplicates(fits_info):
         sn_info (DataFrame): SN-specific information
     """
 
-    duplicated = fits_info.groupby(['R.A.', 'Dec.'])
+    duplicated = fits_info.groupby(['Name'])
     sn_info = pd.DataFrame([], index=pd.Series(fits_info.index, name='name'))
-    old_cols = ['Disc. Date', 'Max Date', 'R.A.', 'Dec.', 'Host Name']
-    new_cols = ['disc_date', 'max_date', 'galex_ra', 'galex_dec', 'osc_host']
+    old_cols = ['Disc. Date', 'R.A.', 'Dec.', 'Host Name']
+    new_cols = ['disc_date', 'galex_ra', 'galex_dec', 'osc_host']
     sn_info[new_cols] = fits_info[old_cols].copy()
     sn_info['epochs_total'] = duplicated['Total Epochs'].transform('sum')
     sn_info['epochs_pre'] = duplicated['Epochs Pre-SN'].transform('sum')
@@ -176,7 +178,7 @@ def compress_duplicates(fits_info):
     sn_info['delta_t_first'] = duplicated['First Epoch'].transform('max')
     sn_info['delta_t_last'] = duplicated['Last Epoch'].transform('max')
     sn_info['delta_t_next'] = duplicated['Next Epoch'].transform('min')
-    sn_info = sn_info.drop_duplicates()
+    sn_info = sn_info.loc[~sn_info.index.duplicated()]
     return sn_info
 
 
@@ -193,6 +195,8 @@ def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
 
     print('Writing quick stats...')
     sne = fits_info['Name'].drop_duplicates()
+    post_disc = fits_info[(fits_info['Epochs Post-SN'] > 0) & (fits_info['Epochs Pre-SN'] == 0)]
+    post_disc_sne = post_disc.drop_duplicates(['Name'])
     final_sne = final_sample.loc[~final_sample.index.duplicated()]
     fuv = final_sample[final_sample['Band'] == 'FUV']
     nuv = final_sample[final_sample['Band'] == 'NUV']
@@ -200,6 +204,7 @@ def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
         f.write('Quick stats:\n')
         f.write('\tnumber of reference SNe: %s\n' % len(osc))
         f.write('\tnumber of SNe with GALEX data: %s\n' % len(sne))
+        f.write('\tnumber of SNe with observations only after discovery: %s\n' % len(post_disc_sne))
         f.write('\tnumber of SNe with observations before and after discovery: %s\n' % len(final_sne))
         f.write('\tfinal sample size: %s\n' % len(sn_info.index))
         f.write('\tnumber of final SNe with FUV observations: %s\n' % len(fuv))
@@ -216,7 +221,7 @@ def plot_observations(fits_info, final_sample):
     print('\nPlotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
 
-    fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05}, figsize=(7,5))
+    fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05})#, figsize=(7,5))
     fig.set_tight_layout(True)
 
     for ax, band in zip(axes, bands):
@@ -226,10 +231,10 @@ def plot_observations(fits_info, final_sample):
 
         bins = np.logspace(0, np.log10(np.max(epochs)), 11)
         color = COLORS[band]
-        ax.hist(epochs, bins=bins, histtype='step', align='left', color=color,
-                label='all SNe')
-        ax.hist(both, bins=bins, histtype='stepfilled', align='left', color=color,
-                label='before+after', alpha=0.7)
+        ax.hist(epochs, bins=bins, histtype='step', align='mid', color=color,
+                label='all SNe', lw=2)
+        ax.hist(both, bins=bins, histtype='bar', align='mid', color=color,
+                label='before+after', rwidth=0.95)
 
         ax.set_title(band, x=0.1, y=0.75)
         ax.set_xscale('log')

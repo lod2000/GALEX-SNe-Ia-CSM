@@ -140,6 +140,9 @@ def plot(sn, sn_info, args):
         xlim = np.array(ax.get_xlim())
         xlim[1] += 0.2 * (xlim[1] - xlim[0])
         ax.set_xlim(xlim)
+        legend_loc = 'upper right'
+    else:
+        legend_loc = 'best'
 
     # Add legend
     handles, labels = ax.get_legend_handles_labels()
@@ -150,7 +153,7 @@ def plot(sn, sn_info, args):
     # Add handles from fluxes
     ncol = 2 if len(handles) < 4 else 3
     plt.legend(handles=[bg_line, bg_patch] + handles, ncol=ncol, 
-            loc='upper right', handletextpad=0.5, handlelength=1.2)
+            loc=legend_loc, handletextpad=0.5, handlelength=1.2)
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()

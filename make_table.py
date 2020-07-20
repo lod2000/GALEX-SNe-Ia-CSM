@@ -48,7 +48,7 @@ def main():
     # Concat references
     sn_info['refs'] = sn_info[['posn_ref', 'z_ref', 'pref_dist_ref']].astype('str').agg(';'.join, axis=1)
     # Ints, not floats
-    sn_info['delta_t_nearest'] = sn_info['delta_t_nearest'].astype(int)
+    sn_info['delta_t_next'] = sn_info['delta_t_next'].astype(int)
 
     # Get BibTeX entries and write bibfile
     overwrite = True

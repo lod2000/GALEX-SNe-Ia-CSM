@@ -47,6 +47,8 @@ def main():
     # sn_info['notes'] = sn_info['notes'].astype(str).replace('nan', 'N/A').agg('; '.join, axis=1)
     # Concat references
     sn_info['refs'] = sn_info[['posn_ref', 'z_ref', 'pref_dist_ref']].astype('str').agg(';'.join, axis=1)
+    # Ints, not floats
+    sn_info['delta_t_nearest'] = sn_info['delta_t_nearest'].astype(int)
 
     # Get BibTeX entries and write bibfile
     overwrite = True

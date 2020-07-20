@@ -6,7 +6,7 @@ import pandas as pd
 # from astropy.coordinates import SkyCoord
 
 INPUT_FILE = 'OSC-pre2014-v3.csv'
-OUTPUT_FILE = 'osc-pre2014-v3-clean.csv'
+OUTPUT_FILE = 'OSC-pre2014-v3-clean.csv'
 
 # Fix odd cases where R.A. or Dec. have 'AM' or 'PM' appended
 # ang: string in format 'HH:MM:SS' or 'Deg:Min:Sec'
@@ -58,6 +58,22 @@ newdec = []
 for dec in osc['Dec.']:
     newdec.append(fix_ang(max(str(dec).split(','),key=len)))
 osc['Dec.'] = newdec
+
+if 'Host R.A.' in osc.columns:
+    # Replace multiple R.A. values with the most precise value
+    newra = []
+    for ra in osc['Host R.A.']:
+        new = max(str(ra).split(','),key=len)
+        new = fix_ang(new)
+        newra.append(new)
+    osc['Host R.A.'] = newra
+
+if 'Host Dec.' in osc.columns:
+    # Replace multiple DEC values with the most precise value
+    newdec = []
+    for dec in osc['Host Dec.']:
+        newdec.append(fix_ang(max(str(dec).split(','),key=len)))
+    osc['Host Dec.'] = newdec
 
 # Take the average of all z values
 newz = []

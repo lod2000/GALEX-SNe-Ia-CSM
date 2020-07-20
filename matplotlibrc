@@ -37,3 +37,4 @@ legend.edgecolor    : 0
 legend.borderpad    : 0.8
 legend.borderaxespad: 1
 legend.handlelength : 2.5
+legend.columnspacing: 1.0

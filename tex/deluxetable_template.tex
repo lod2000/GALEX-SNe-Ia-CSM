@@ -1,4 +1,4 @@
-\begin{longrotatetable}
+\begin{longrotatetable}[htb]
 \movetabledown=0.5in
 \begin{deluxetable*}{lcccccccccl}
 \tablewidth{700pt}
@@ -9,7 +9,7 @@ and $z<0.5$. The complete table will be available as supplementary material.
 \tablehead{
     \colhead{Target} & \colhead{Disc. Date} & \colhead{\galex Coordinates} & 
     \colhead{Obs.} & \colhead{$\Delta t_\text{first}$} & 
-    \colhead{$\Delta t_\text{last}$} & \colhead{$\Delta t_\text{nearest}$} & 
+    \colhead{$\Delta t_\text{last}$} & \colhead{$\Delta t_\text{next}$} & 
     \colhead{Redshift} & \colhead{Distance} & \colhead{$A_V$} & \colhead{Reference(s)} \\
     \colhead{Name} & \colhead{} & \colhead{$\alpha$, $\delta$ (J2000)} & 
     \colhead{Epochs} & \colhead{[days]} & 
@@ -23,6 +23,7 @@ and $z<0.5$. The complete table will be available as supplementary material.
     than 30 kpc}
 \tablenotetext{b}{Redshift-independent distance from \citet{Tully2016-Cosmicflows3}}
 \tablecomments{Discovery dates were retrieved from the Open Supernova Catalog; 
-redshift, Hubble distance, extinction, and host morphology were retrieved from NED.}
+redshift, Hubble distance, extinction, and host morphology were retrieved from NED. Columns 5-7 list the number of days between the first \galex observation and SN discovery ($\Delta t_\text{first}$), the number of days between discovery and the last \galex observation ($\Delta t_\text{last}$), and the number of days between discovery and the next \galex observation ($\Delta t_\text{next}$)}
+% TODO find a better way to present these definitions
 \end{deluxetable*}
 \end{longrotatetable}

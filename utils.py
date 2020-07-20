@@ -584,7 +584,8 @@ class SN:
         disc_date = osc.loc[name, 'Disc. Date']
         self.disc_date = Time(str(disc_date), format='iso', out_subfmt='date')
         max_date = osc.loc[name, 'Max Date']
-        self.max_date = Time(str(max_date), format='iso', out_subfmt='date')
+        if pd.notna(max_date):
+            self.max_date = Time(str(max_date), format='iso', out_subfmt='date')
         self.mmax = osc.loc[name, 'mmax']
         self.host = osc.loc[name, 'Host Name']
         self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')

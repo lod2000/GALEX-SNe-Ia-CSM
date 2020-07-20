@@ -29,6 +29,8 @@ def main():
             help='also plot external light curves')
     parser.add_argument('-l', '--log', action='store_true',
             help='plot light curves in log(flux)')
+    parser.add_argument('-p', '--pad', action='store_true',
+            help='extra padding for legend at the top-right')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(args.info, index_col='name')
@@ -124,13 +126,20 @@ def plot(sn, sn_info, args):
     if args.log:
         flux_exp_text = ''
         ax.set_yscale('log')
+        ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
+        if args.pad:
+            ylim_flux[1] *= 3
+            ax.set_ylim(ylim_flux)
     else:
         flux_exp_text = '$10^{%s}$ ' % flux_exp
         ax.ticklabel_format(useOffset=False)
-    ax.set_ylabel('Flux [%serg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp_text)
+        ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
+    ax.set_ylabel('Flux Density [%serg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp_text)
     ax.set_title(sn)
-    ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
-    print(ylim_flux)
+    if args.pad:
+        xlim = np.array(ax.get_xlim())
+        xlim[1] += 0.2 * (xlim[1] - xlim[0])
+        ax.set_xlim(xlim)
 
     # Add legend
     handles, labels = ax.get_legend_handles_labels()
@@ -141,7 +150,7 @@ def plot(sn, sn_info, args):
     # Add handles from fluxes
     ncol = 2 if len(handles) < 4 else 3
     plt.legend(handles=[bg_line, bg_patch] + handles, ncol=ncol, 
-            loc='best', handletextpad=0.5, handlelength=1.2)
+            loc='upper right', handletextpad=0.5, handlelength=1.2)
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()

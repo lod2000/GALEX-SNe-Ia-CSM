@@ -10,7 +10,7 @@ CAT_FILE = Path('tex/catalog_codes.txt')
 LATEX_TABLE_TEMPLATE = Path('tex/deluxetable_template.tex')
 LATEX_TABLE_FILE = Path('tex/table.tex')
 SHORT_TABLE_FILE = Path('tex/short_table.tex')
-SHORT_TABLE_LENGTH = 30 # Number of rows to display in short table
+SHORT_TABLE_LENGTH = 22 # Number of rows to display in short table
 
 pd.set_option('max_colwidth', 1000)
 

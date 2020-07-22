@@ -31,6 +31,8 @@ def main():
             help='plot light curves in log(flux)')
     parser.add_argument('-p', '--pad', action='store_true',
             help='extra padding for legend at the top-right')
+    parser.add_argument('-r', '--restframe', action='store_true',
+            help='plot rest frame time, corrected for z')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(args.info, index_col='name')
@@ -107,7 +109,13 @@ def plot(sn, sn_info, args):
                 color=color, alpha=bg_alpha)
 
         # Plot fluxes
-        ax.errorbar(after['t_delta'], after['flux_bgsub'] * yscale, 
+        if args.restframe:
+            dt = after['t_delta_destretch']
+            xlabel = 'Rest frame time since discovery [days]'
+        else:
+            dt = after['t_delta']
+            xlabel = 'Time since discovery [days]'
+        ax.errorbar(dt, after['flux_bgsub'] * yscale, 
                 yerr=after['flux_bgsub_err_total'] * yscale, linestyle='none', 
                 marker='o', ms=5, alpha=1,
                 elinewidth=1, c=color, label=band
@@ -122,7 +130,7 @@ def plot(sn, sn_info, args):
                 c=COLORS[band], label='%s host (%s)' % (band, len(before.index)))
 
     # Configure plot
-    ax.set_xlabel('Time since discovery [days]')
+    ax.set_xlabel(xlabel)
     if args.log:
         flux_exp_text = ''
         ax.set_yscale('log')
@@ -180,6 +188,10 @@ def plot_swift(ax, sn, sn_info, yscale, args):
     bands = ['UVW1', 'UVM2', 'UVW2']
     for band in bands:
         data = lc[lc['band'] == band]
+        if args.restframe:
+            dt = data['t_delta_destretch']
+        else:
+            dt = data['t_delta']
         ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',
                 yerr=data['flux_err'] * yscale, marker='D', ms=4, label=band,
                 elinewidth=1, markeredgecolor=COLORS[band], markerfacecolor='white',

@@ -283,6 +283,9 @@ def full_import(sn, band, sn_info):
     lc['absolute_mag_err_2'] = absolute_mag_err(
             lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
 
+    # Correct epoch for stretch factor
+    lc['t_delta_destretch'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
+
     return lc, bg, bg_err, sys_err
 
 
@@ -527,6 +530,9 @@ def import_swift_lc(sn, sn_info):
     lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
     lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
             lc['flux'], lc['flux_err'], dist, dist_err)
+
+    # Correct epoch for stretch factor
+    lc['t_delta_destretch'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
 
     return lc
 

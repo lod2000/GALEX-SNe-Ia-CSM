@@ -33,6 +33,7 @@ def main():
             help='extra padding for legend at the top-right')
     parser.add_argument('-r', '--restframe', action='store_true',
             help='plot rest frame time, corrected for z')
+    parser.add_argument('--notitle', action='store_true', help='omit axis title')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(args.info, index_col='name')
@@ -110,7 +111,7 @@ def plot(sn, sn_info, args):
 
         # Plot fluxes
         if args.restframe:
-            dt = after['t_delta_destretch']
+            dt = after['t_delta_rest']
             xlabel = 'Rest frame time since discovery [days]'
         else:
             dt = after['t_delta']
@@ -143,7 +144,8 @@ def plot(sn, sn_info, args):
         ax.ticklabel_format(useOffset=False)
         ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
     ax.set_ylabel('Flux Density [%serg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp_text)
-    ax.set_title(sn)
+    if not args.notitle:
+        ax.set_title(sn)
     if args.pad:
         xlim = np.array(ax.get_xlim())
         xlim[1] += 0.2 * (xlim[1] - xlim[0])
@@ -189,7 +191,7 @@ def plot_swift(ax, sn, sn_info, yscale, args):
     for band in bands:
         data = lc[lc['band'] == band]
         if args.restframe:
-            dt = data['t_delta_destretch']
+            dt = data['t_delta_rest']
         else:
             dt = data['t_delta']
         ax.errorbar(data['t_delta'], data['flux'] * yscale, linestyle='none',

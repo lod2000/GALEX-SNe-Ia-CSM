@@ -261,6 +261,9 @@ def full_import(sn, band, sn_info):
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
     lc['t_delta'] = lc['t_mean_mjd'] - disc_date.mjd
 
+    # Correct epoch for stretch factor
+    lc['t_delta_rest'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
+
     # Get background & systematic error
     bg, bg_err, sys_err = get_background(lc, band)
     # Add systematic error
@@ -282,9 +285,6 @@ def full_import(sn, band, sn_info):
             lc['mag_bgsub'], lc['mag_bgsub_err_1'], dist, dist_err)
     lc['absolute_mag_err_2'] = absolute_mag_err(
             lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
-
-    # Correct epoch for stretch factor
-    lc['t_delta_destretch'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
 
     return lc, bg, bg_err, sys_err
 
@@ -532,7 +532,7 @@ def import_swift_lc(sn, sn_info):
             lc['flux'], lc['flux_err'], dist, dist_err)
 
     # Correct epoch for stretch factor
-    lc['t_delta_destretch'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
+    lc['t_delta_rest'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
 
     return lc
 

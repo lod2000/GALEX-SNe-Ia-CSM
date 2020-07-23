@@ -33,8 +33,8 @@ def main():
     # Parse arguments for: fits file parent directory, SN reference info
     parser = argparse.ArgumentParser(description='Classify FITS images by \
             relative timing to SN discovery date.')
-    # parser.add_argument('fits_dir', metavar='dir', type=Path, help='path to \
-    #         FITS data directory')
+    parser.add_argument('-i', '--input', metavar='dir', type=Path, 
+            default=FITS_DIR, help='path to FITS data directory')
     parser.add_argument('-o', '--overwrite', action='store_true',
             help='re-generate FITS info file and overwrite existing')
     args = parser.parse_args()
@@ -53,7 +53,7 @@ def main():
 
     if args.overwrite or not FITS_INFO_FILE.is_file():
         # Get all FITS file paths
-        fits_files = get_fits_files(FITS_DIR, osc)
+        fits_files = get_fits_files(args.input, osc)
         # Import all FITS files
         fits_info = compile_fits(fits_files, osc)
         output_csv(fits_info, FITS_INFO_FILE, index=False)

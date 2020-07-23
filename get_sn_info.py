@@ -14,15 +14,17 @@ from astropy import units as u
 from pathlib import Path
 from time import sleep
 import matplotlib.pyplot as plt
+import argparse
 from utils import *
 
 C = 3.e5 # km/s
-H_0 = 70. # km/s/Mpc
+H0 = 70. # km/s/Mpc
 OMEGA_M = 0.3
 OMEGA_V = 0.7
 WMAP = 4
 CORR_Z = 1
 QUERY_RADIUS = 5. # arcmin
+V_PEC = 300 # km/s
 SN_INFO_FILE = Path('ref/sn_info.csv')
 NED_RESULTS_FILE = Path('ref/ned.csv')
 COSMIC_FLOWS_FILE = Path('ref/qualityDistances.csv')
@@ -31,19 +33,26 @@ HYPERLEDA_FILE = Path('ref/hyperleda.info.cgi')
 
 def main():
 
+    # Argument parser
+    parser = argparse.ArgumentParser(description='Pull supernova reference info from NED and other databases.')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+            help='completely re-generate database from NED')
+    parser.add_argument('-a', '--append', action='store_true',
+            help='append new requests to previous NED output')
+    args = parser.parse_args()
+
     sn_info = pd.read_csv(SN_INFO_FILE, index_col='name')
     osc = pd.read_csv(OSC_FILE, index_col='Name')
 
-    prev = 'o'
-    if NED_RESULTS_FILE.is_file():
-        prev = input('Previous NED query results found. [K]eep/[c]ontinue/[o]verwrite? ')
+    if not NED_RESULTS_FILE.is_file():
+        args.overwrite = True
 
     # Overwrite completely
-    if prev == 'o':
+    if args.overwrite:
         ned = pd.DataFrame()
         sne = np.array(sn_info.index)
     # Continue from previous output
-    elif prev == 'c':
+    elif args.append:
         ned = pd.read_csv(NED_RESULTS_FILE, index_col='name', dtype={'z':float, 'h_dist':float})
         sne = np.array([row.name for i, row in sn_info.iterrows() if row.name not in ned.index])
     # Keep previous output
@@ -176,7 +185,7 @@ def scrape_overview(objname, verb=0):
     """
 
     # Get BeautifulSoup from URL
-    url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&omegav=%s&wmap=%s&corr_z=%s' % (objname, H_0, OMEGA_M, OMEGA_V, WMAP, CORR_Z)
+    url = 'https://ned.ipac.caltech.edu/byname?objname=%s&hconst=%s&omegam=%s&omegav=%s&wmap=%s&corr_z=%s' % (objname, H0, OMEGA_M, OMEGA_V, WMAP, CORR_Z)
     if verb:
         print('\tscraping %s ...' % url)
     response = requests.get(url)
@@ -291,6 +300,8 @@ def combine_sn_info(ned, sn_info):
     # Remove NED z-indep distance column
     if 'z_indep_dist' in ned.columns:
         ned.drop(columns=['z_indep_dist'], inplace=True)
+    # Inflate Hubble-derived distances by V_PEC
+    ned['h_dist_err'] = np.sqrt(ned['h_dist_err']**2 + (V_PEC / H0)**2).round(2)
 
     # Select NED entries that exist in sn_info
     ned_select = ned.loc[ned.index.isin(sn_info.index)]

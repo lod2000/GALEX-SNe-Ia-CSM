@@ -221,7 +221,7 @@ def plot_observations(fits_info, final_sample):
     print('\nPlotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
 
-    fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05})#, figsize=(7,5))
+    fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05}, figsize=(8,6.5))
     fig.set_tight_layout(True)
 
     for ax, band in zip(axes, bands):
@@ -236,7 +236,7 @@ def plot_observations(fits_info, final_sample):
         ax.hist(both, bins=bins, histtype='bar', align='mid', color=color,
                 label='before+after', rwidth=0.95)
 
-        ax.set_title(band, x=0.1, y=0.75)
+        ax.set_title(band, x=0.08, y=0.8)
         ax.set_xscale('log')
         ax.xaxis.set_major_formatter(tkr.ScalarFormatter())
         ax.legend()

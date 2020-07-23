@@ -147,7 +147,7 @@ def detect_sn(sn, sn_info, args):
         if xmax > 0 and len(lc.index) > 0:
             ax.set_xlabel('Observed time since discovery [days]')
             ax.set_xlim((xmin - 50, xmax + 50))
-            ax.set_ylabel('Observed flux density [erg s^-1 Å^-1 cm^-2]')
+            ax.set_ylabel('Observed flux [erg s^-1 Å^-1 cm^-2]')
             plt.legend()
             fig.suptitle(sn)
             # Save full figure

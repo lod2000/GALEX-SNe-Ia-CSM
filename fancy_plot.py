@@ -12,7 +12,7 @@ from pathlib import Path
 def main():
 
     parser = argparse.ArgumentParser(description='Generate publication-quality plots of light curves for individual SNe.')
-    parser.add_argument('sne', metavar='SN', type=str, nargs='+', help='supernova name')
+    parser.add_argument('sne', metavar='SN', type=str, nargs='+', help='supernova name(s)')
     parser.add_argument('-b', '--band', type=str, choices=['FUV', 'NUV', 'both'], 
             default='both', help='GALEX bands to plot')
     parser.add_argument('-s', '--sigma', type=float, default=3, 
@@ -23,9 +23,9 @@ def main():
             help='path to sn info csv file', metavar='file.csv')
     parser.add_argument('-S', '--show', action='store_true',
             help='show each plot before saving')
-    parser.add_argument('-o', '--output', type=Path, default=Path('figs/'),
-            help='output directory', metavar='dir')
-    parser.add_argument('-e', '--external', action='store_true',
+    parser.add_argument('-o', '--output', type=Path, nargs='+',
+            help='output file(s)', metavar='plot.png')
+    parser.add_argument('-e', '--external', type=str, choices=['swift', 'panstarrs', 'all'],
             help='also plot external light curves')
     parser.add_argument('-l', '--log', action='store_true',
             help='plot light curves in log(flux)')
@@ -36,17 +36,17 @@ def main():
     parser.add_argument('--notitle', action='store_true', help='omit axis title')
     args = parser.parse_args()
 
+    if args.output is None or len(args.output) != len(args.sne):
+        args.output = [Path('figs/%s.png' % sn) for sn in args.sne]
+
     sn_info = pd.read_csv(args.info, index_col='name')
 
-    for sn in args.sne:
-        try:
-            plot(sn, sn_info, args)
-        except FileNotFoundError:
-            print('%s is missing at least one LC file! Skipping for now.' % sn)
-            continue
+    for sn, output in zip(args.sne, args.output):
+        print('\nPlotting %s to %s...' % (sn, output))
+        plot(sn, sn_info, args, output)
 
 
-def plot(sn, sn_info, args):
+def plot(sn, sn_info, args, output):
     """
     Plots light curve(s) for given SN
     Inputs:
@@ -82,11 +82,12 @@ def plot(sn, sn_info, args):
         yscale = 1 / (10**flux_exp)
 
     # Plot external light curves (e.g. Swift)
-    if args.external:
+    if args.external == 'swift' or args.external == 'all':
         try:
             ax = plot_swift(ax, sn, sn_info, yscale, args)
         except (ValueError, FileNotFoundError):
             print('%s is missing a Swift data entry!' % sn)
+    if args.external == 'panstarrs' or args.external == 'all':
         try:
             ax = plot_panstarrs(ax, sn, sn_info, yscale, args)
         except (ValueError, FileNotFoundError):
@@ -181,7 +182,7 @@ def plot(sn, sn_info, args):
     luminosity_ax.set_ylabel('Luminosity [%serg s$^{-1}$ Å$^{-1}$]' % luminosity_exp_text, 
             rotation=270, labelpad=24)
 
-    plt.savefig(args.output / Path('%s.png' % sn), dpi=300)
+    plt.savefig(output, dpi=300)
     if args.show: plt.show()
 
 

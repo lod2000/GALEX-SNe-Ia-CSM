@@ -115,7 +115,7 @@ def plot(sn, sn_info, args):
             xlabel = 'Rest frame time since discovery [days]'
         else:
             dt = after['t_delta']
-            xlabel = 'Time since discovery [days]'
+            xlabel = 'Observed time since discovery [days]'
         ax.errorbar(dt, after['flux_bgsub'] * yscale, 
                 yerr=after['flux_bgsub_err_total'] * yscale, linestyle='none', 
                 marker='o', ms=5, alpha=1,
@@ -143,7 +143,8 @@ def plot(sn, sn_info, args):
         flux_exp_text = '$10^{%s}$ ' % flux_exp
         ax.ticklabel_format(useOffset=False)
         ylim_flux = np.array(ax.get_ylim()) * 10**flux_exp
-    ax.set_ylabel('Flux Density [%serg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp_text)
+
+    ax.set_ylabel('Observed flux [%serg s$^{-1}$ Å$^{-1}$ cm$^{-2}$]' % flux_exp_text)
     if not args.notitle:
         ax.set_title(sn)
     if args.pad:
@@ -167,7 +168,7 @@ def plot(sn, sn_info, args):
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()
-    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'pref_dist'])
+    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'pref_dist'], sn_info.loc[sn, 'z'])
     if args.log:
         luminosity_ax.set_yscale('log')
         luminosity_ax.set_ylim(ylim_luminosity)

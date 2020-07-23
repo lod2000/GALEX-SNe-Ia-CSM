@@ -56,13 +56,14 @@ plt.close()
 
 # Estimate temperature
 r = 0
-temp = 20000 # K
-lambda_eff = {'FUV': 1549, 'NUV': 2304.7}
-while r < mean_ratio - mean_ratio_err:
+temp = 10000 # K
+lambda_eff = {'FUV': 1549, 'NUV': 2304.7} # observed wavelength
+z_factor = 1/(1+sn_info.loc[sn, 'z'])
+while r < mean_ratio:
     temp += 100
     bb = models.BlackBody(temperature=temp*u.K)
-    FUV = bb(lambda_eff['FUV'] * u.AA)
-    NUV = bb(lambda_eff['NUV'] * u.AA)
+    FUV = bb(lambda_eff['FUV'] * z_factor * u.AA)
+    NUV = bb(lambda_eff['NUV'] * z_factor * u.AA)
     r = FUV / NUV
 
 print(temp)

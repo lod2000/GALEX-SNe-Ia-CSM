@@ -162,7 +162,7 @@ def swift_cps2flux(cps, cps_err, band):
     return flux, flux_err
 
 
-def absolute_luminosity(flux, dist):
+def absolute_luminosity(flux, dist, z):
     """
     Converts measured fluxes to absolute luminosities based on distance
     Inputs:
@@ -173,11 +173,11 @@ def absolute_luminosity(flux, dist):
     """
 
     cm_Mpc = 3.08568e24 # cm / Mpc
-    luminosity = 4 * np.pi * (dist * cm_Mpc)**2 * flux
+    luminosity = 4 * np.pi * (dist * cm_Mpc)**2 * (1 + z) ** 2 * flux
     return luminosity
 
 
-def absolute_luminosity_err(flux, flux_err, dist, dist_err):
+def absolute_luminosity_err(flux, flux_err, dist, dist_err, z):
     """
     Converts measured fluxes to absolute luminosities based on distance, and
     also returns corresponding error
@@ -190,7 +190,7 @@ def absolute_luminosity_err(flux, flux_err, dist, dist_err):
         absolute luminosity (Array), luminosity error (Array)
     """
 
-    luminosity = absolute_luminosity(flux, dist)
+    luminosity = absolute_luminosity(flux, dist, z)
     err = np.abs(luminosity) * np.sqrt((2*dist_err/dist)**2 + (flux_err/flux)**2)
     return luminosity, err
 
@@ -275,10 +275,11 @@ def full_import(sn, band, sn_info):
     # Convert measured fluxes to absolute luminosities
     dist = sn_info.loc[sn, 'pref_dist']
     dist_err = sn_info.loc[sn, 'pref_dist_err']
+    z = sn_info.loc[sn, 'z']
     lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            lc['flux_bgsub'], lc['flux_bgsub_err_total'], dist, dist_err)
+            lc['flux_bgsub'], lc['flux_bgsub_err_total'], dist, dist_err, z)
     lc['luminosity_hostsub'], lc['luminosity_hostsub_err'] = absolute_luminosity_err(
-            lc['flux_hostsub'], lc['flux_hostsub_err'], dist, dist_err)
+            lc['flux_hostsub'], lc['flux_hostsub_err'], dist, dist_err, z)
 
     # Convert apparent to absolute magnitudes
     lc['absolute_mag'], lc['absolute_mag_err_1'] = absolute_mag_err(
@@ -520,6 +521,7 @@ def import_swift_lc(sn, sn_info):
     # AB apparent and absolute magnitudes
     dist = sn_info.loc[sn, 'pref_dist']
     dist_err = sn_info.loc[sn, 'pref_dist_err']
+    z = sn_info.loc[sn, 'z']
     lc['ab_mag'], lc['ab_mag_err'] = swift_vega2ab(
             lc['magnitude'], lc['e_magnitude'], lc['band'])
     lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag_err(
@@ -529,7 +531,7 @@ def import_swift_lc(sn, sn_info):
     lc['cps'], lc['cps_err'] = swift_mag2cps(lc['ab_mag'], lc['ab_mag_err'], lc['band'])
     lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
     lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            lc['flux'], lc['flux_err'], dist, dist_err)
+            lc['flux'], lc['flux_err'], dist, dist_err, z)
 
     # Correct epoch for stretch factor
     lc['t_delta_rest'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']

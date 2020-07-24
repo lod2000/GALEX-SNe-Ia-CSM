@@ -62,7 +62,7 @@ def main():
     detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
     detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 
             'Max Sigma', 'Background', 'Background Error', 'Systematic Error'])
-    output_csv(detected_sne, 'out/detections.csv', index=False)
+    output_csv(detected_sne, 'out/candidate_detections.csv', index=False)
 
     # Limit plot
     # fig = plt.figure(figsize=(11, 7))

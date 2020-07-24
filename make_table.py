@@ -1,7 +1,4 @@
-import numpy as np
-import pandas as pd
-from pathlib import Path
-import utils
+from utils import *
 import requests
 
 SN_INFO_FILE = Path('ref/sn_info.csv')

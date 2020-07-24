@@ -232,9 +232,9 @@ def plot_observations(fits_info, final_sample):
         bins = np.logspace(0, np.log10(np.max(epochs)), 11)
         color = COLORS[band]
         ax.hist(epochs, bins=bins, histtype='step', align='mid', color=color,
-                label='all SNe', lw=2)
+                label='all SNe (%s)' % epochs.shape[0], lw=2)
         ax.hist(both, bins=bins, histtype='bar', align='mid', color=color,
-                label='before+after', rwidth=0.95)
+                label='before+after (%s)' % both.shape[0], rwidth=0.95)
 
         ax.set_title(band, x=0.08, y=0.8)
         ax.set_xscale('log')

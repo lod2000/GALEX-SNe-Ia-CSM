@@ -1,58 +1,52 @@
+#!/usr/bin/env python
+
 import multiprocessing as mp
 from functools import partial
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import astropy.units as u
+import argparse
 from utils import *
 
-overwrite = False
-plot_systematics = True
+DET_SIGMA = 3 # detection threshold
+LIMIT_SIGMA = 1 # factor to inflate uncertainty for upper limits
 
 
 def main():
+    parser = argparse.ArgumentParser(description='Plot detection limits.')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+            help='re-concatenate detection and nondetection data.')
+    parser.add_argument('-s', '--systematics', action='store_true',
+            help='plot observation and sample systematics.')
+    args = parser.parse_args()
+
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
     conf_det = pd.read_csv(Path('out/confirmed_detections.csv'))
     det_sne = list(zip(conf_det['Name'], conf_det['Band']))
 
-    if overwrite or not Path('out/nondetections.csv').is_file():
+    if args.overwrite or not Path('out/nondetections.csv').is_file():
         print('Separating detections from nondetections...')
-
-        # Combine detections
-        detections = []
-        for sn, band in det_sne:
-            lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
-            lc = add_uniform_columns(lc, [sn, band, bg, bg_err, sys_err], 
-                    ['name', 'band', 'host', 'host_err', 'sys_err'])
-            lc['sigma'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
-            detections.append(lc)
-        detections = pd.concat(detections, ignore_index=True)
-        output_csv(detections, Path('out/detections.csv'), index=False)
-
-        # Combine nondetections
-        bands = ['FUV', 'NUV'] * len(sn_info.index)
-        sne = np.array([[sn] * 2 for sn in sn_info.index]).flatten()
-        nondet_sne = zip(sne, bands)
-        # Remove detections
-        nondet_sne = [loc for loc in nondet_sne if not loc in det_sne]
-        with mp.Pool() as pool:
-            nondetections = list(tqdm(
-                pool.imap(partial(get_nondetection, sn_info=sn_info), 
-                    nondet_sne, chunksize=10), 
-                total=len(nondet_sne)
-            ))
-        nondetections = [lc for lc in nondetections if len(lc.index) > 0]
-        nondetections = pd.concat(nondetections, ignore_index=True)
-        output_csv(nondetections, Path('out/nondetections.csv'), index=False)
+        detections = aggregate_detections(det_sne, sn_info)
+        nondetections = aggregate_nondetections(det_sne, sn_info)
     else:
         detections = pd.read_csv(Path('out/detections.csv'))
         nondetections = pd.read_csv(Path('out/nondetections.csv'))
 
-    if plot_systematics:
+    if args.systematics:
         print('Plotting systematics...')
         # Look for systematics in observations
         all_detections = nondetections.append(detections)
+        all_detections.set_index('name', inplace=True)
+        # low_z = sn_info[sn_info['z'] < 0.07]
+        # Remove SDSS - test
+        # no_sdss = sn_info[~sn_info['posn_ref'].str.contains('SDSS', na=False)]
+        # no_sdss = no_sdss[~no_sdss['z_ref'].str.contains('SDSS', na=False)]
+        # no_sdss = no_sdss[~no_sdss.index.str.contains('SDSS')]
+        # no_sdss = no_sdss[~no_sdss['objname'].str.contains('SDSS', na=False)]
+        # no_sdss = no_sdss.drop(['SNLS-05D3kx', 'SNLS-06D3cn'])
+        # print(len(no_sdss.index))
+        # all_detections = all_detections.loc[no_sdss.index.to_list()]
         plot_observation_systematics(all_detections, sn_info)
-        # Look for systematics in SN sample
         plot_sample_systematics(sn_info)
 
     print('Plotting detections & limits...')
@@ -61,40 +55,57 @@ def main():
     fig.set_tight_layout(True)
 
     ebar_alpha = 0.8
-    limit_alpha = 0.6 # downward triangle: 3-sigma limit
-    detection_cutoff = 3 # sigma
-    limit_sigma = 3
+    limit_alpha = 0.6
     nondet_alpha = 0.1
+    upper_lim = 1e28
 
     markers = ['o', 's', 'p', 'd', 'X', 'P', '*']
-
-    # Plot detections
-    for i, (sn, band) in enumerate(det_sne):
-        lc = detections[(detections['name'] == sn) & (detections['band'] == band)]
-        lc_det = lc[lc['sigma'] > detection_cutoff]
-        ebar = ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub'],
-                yerr=lc_det['luminosity_hostsub_err'], linestyle='none', 
-                label='%s (%s)' % (sn, band), marker=markers[i], ms=6, elinewidth=1)
-        [bar.set_alpha(ebar_alpha) for bar in ebar[2]]
-        lc_non = lc[lc['sigma'] <= detection_cutoff]
-        ax.scatter(lc_non['t_delta_rest'], limit_sigma * lc_non['luminosity_hostsub_err'],
-                marker='v', s=36, color=ebar[0].get_color(), alpha=limit_alpha)
+    colors = ['cyan', 'orange', 'green', 'red']
 
     # Plot nondetections
     for band in ['FUV', 'NUV']:
         lc = nondetections[nondetections['band'] == band]
-        ax.scatter(lc['t_delta_rest'], limit_sigma * lc['luminosity_hostsub_err'],
-                marker='v', s=25, color=COLORS[band], alpha=nondet_alpha)
-        # ax.scatter(lc['t_delta'], 3 * lc['luminosity_hostsub_err'],
+        # Convert flux density per angstrom to per Hz
+        ax.scatter(lc['t_delta_rest'], LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'],
+                marker='v', s=25, color=COLORS[band], alpha=nondet_alpha, edgecolors='none')
+        # ax.scatter(lc['t_delta'], 3 * lc['luminosity_hostsub_err_hz'],
         #         marker='v', s=25, color=COLORS[band], alpha=limit_alpha)
+
+    below_graham = nondetections[nondetections['luminosity_hostsub_err'] * LIMIT_SIGMA < 4.3e37]
+    print(len(below_graham.index))
+    print(len(below_graham['name'].drop_duplicates().index))
+
+    below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < 10**25.88]
+    print(len(below_graham.index))
+    print(len(below_graham['name'].drop_duplicates().index))
+
+    # Plot detections
+    for i, (sn, band) in enumerate(det_sne):
+        lc = detections[(detections['name'] == sn) & (detections['band'] == band)]
+        lc_det = lc[lc['sigma'] > DET_SIGMA]
+        ebar = ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
+                yerr=lc_det['luminosity_hostsub_err_hz'], linestyle='none', 
+                label='%s (%s)' % (sn, band), marker=markers[i], ms=6, elinewidth=1,
+                markeredgecolor='k', color=colors[i])
+        # [bar.set_alpha(ebar_alpha) for bar in ebar[2]]
+        lc_non = lc[lc['sigma'] <= DET_SIGMA]
+        ax.scatter(lc_non['t_delta_rest'], LIMIT_SIGMA * lc_non['luminosity_hostsub_err_hz'],
+                marker='v', s=36, color=ebar[0].get_color(), alpha=limit_alpha,
+                edgecolors='k')
+
+    # Plot Graham detections
+    # note: Graham uses days past explosion, not discovery
+    ax.scatter(686, 10**25.88, marker='*', s=64, color='w', edgecolors='k', 
+            label='SN2015cp (F275W)')
 
     ax.set_xlabel('Rest frame time since discovery [days]')
     # ax.set_xlabel('Observed time since discovery [days]')
     ax.set_xlim((-50, None))
-    ax.set_ylabel('Luminosity [erg s$^{-1}$ Å$^{-1}$]')
+    ax.set_ylabel('Luminosity [erg s$^{-1}$ Hz$^{-1}$]')
     ax.set_yscale('log')
+    ax.set_ylim((None, upper_lim))
 
-    plt.legend()
+    plt.legend(loc='upper right')
     plt.savefig('out/limits.png', dpe=300)
     plt.show()
 
@@ -106,6 +117,37 @@ def add_uniform_columns(df, values, col_names):
     return df
 
 
+def aggregate_detections(det_sne, sn_info):
+    detections = []
+    for sn, band in det_sne:
+        lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
+        lc = add_uniform_columns(lc, [sn, band, bg, bg_err, sys_err], 
+                ['name', 'band', 'host', 'host_err', 'sys_err'])
+        lc['sigma'] = lc['flux_hostsub_hz'] / lc['flux_hostsub_err_hz']
+        detections.append(lc)
+    detections = pd.concat(detections, ignore_index=True)
+    output_csv(detections, Path('out/detections.csv'), index=False)
+    return detections
+
+
+def aggregate_nondetections(det_sne, sn_info):
+    bands = ['FUV', 'NUV'] * len(sn_info.index)
+    sne = np.array([[sn] * 2 for sn in sn_info.index]).flatten()
+    nondet_sne = zip(sne, bands)
+    # Remove detections
+    nondet_sne = [loc for loc in nondet_sne if not loc in det_sne]
+    with mp.Pool() as pool:
+        nondetections = list(tqdm(
+            pool.imap(partial(get_nondetection, sn_info=sn_info), 
+                nondet_sne, chunksize=10), 
+            total=len(nondet_sne)
+        ))
+    nondetections = [lc for lc in nondetections if len(lc.index) > 0]
+    nondetections = pd.concat(nondetections, ignore_index=True)
+    output_csv(nondetections, Path('out/nondetections.csv'), index=False)
+    return nondetections
+
+
 def get_nondetection(loc, sn_info):
     sn, band = loc
     try:
@@ -113,7 +155,7 @@ def get_nondetection(loc, sn_info):
         lc = add_uniform_columns(lc, [sn, band, bg, bg_err, sys_err], 
                 ['name', 'band', 'host', 'host_err', 'sys_err'])
         return lc
-    except (FileNotFoundError, KeyError):
+    except (FileNotFoundError, KeyError, pd.errors.EmptyDataError):
         return pd.DataFrame([])
 
 

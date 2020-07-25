@@ -24,6 +24,10 @@ DT_MIN = -30        # Separation between background and SN data (days)
 
 # GALEX spacecraft info
 PLATE_SCALE = 6 # (as/pixel)
+LAMBDA_EFF = {'FUV': 1549, 'NUV': 2304.7} # angstroms
+
+# Physical constants
+C = 3e8 # meter/second
 
 # Plot color palette
 COLORS = {'FUV' : '#a37', 'NUV' : '#47a', # GALEX
@@ -92,6 +96,8 @@ factors.
 # https://asd.gsfc.nasa.gov/archive/galex/FAQ/counts_background.html
 GALEX_ZERO_POINT    = {'FUV': 18.82, 'NUV': 20.08}
 GALEX_FLUX_FACTOR   = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
+# Bianchi values for Milky Way extinction (over E(B-V)), from Table 2
+GALEX_EXTINCTION    = {'FUV': 8.06, 'NUV': 7.95, 'U': 4.72, 'B': 4.02, 'V': 3.08}
 # Poole et al. 2007
 SWIFT_ZERO_POINT    = {'V': 17.89, 'B': 19.11, 'U': 18.34, 'UVW1': 17.49, 
                        'UVM2': 16.82, 'UVW2': 17.35}
@@ -108,6 +114,18 @@ SWIFT_AB_CONV_ERROR = {'V': 0.01, 'B': 0.02, 'U': 0.02, 'UVW1': 0.03,
                        'UVM2': 0.03, 'UVW2': 0.03}
 
 
+def freq2wavelength(flux, wavelength):
+    # Converts flux density from per Hz to per wavelength (A)
+    # Input wavelength: effective wavelength of filter, in angstroms
+    return flux * C * 1e10 / wavelength**2
+
+
+def wavelength2freq(flux, wavelength):
+    # Converts flux density from per Angstrom to per Hz
+    # Input wavelength: effective wavelength of filter, in angstroms
+    return flux * wavelength**2 / (C * 1e10)
+
+
 def galex_cps2flux(cps, band):
     # Converts GALEX CPS to flux values
     return np.vectorize(GALEX_FLUX_FACTOR.get)(band) * cps
@@ -116,6 +134,13 @@ def galex_cps2flux(cps, band):
 def galex_cps2mag(cps, band):
     # Converts GALEX CPS to AB magnitudes
     return -2.5 * np.log10(cps) + np.vectorize(GALEX_ZERO_POINT.get)(band)
+
+
+def galex_extinction(a_v, band):
+    # Converts foreground extinction A_V to FUV or NUV extinction in mags
+    E = a_v / GALEX_EXTINCTION['V'] # E(B-V)
+    a_band = E * GALEX_EXTINCTION[band] # A_FUV or A_NUV
+    return a_band # magnitudes
 
 
 def galex_flux2mag(flux, band):
@@ -164,22 +189,25 @@ def swift_cps2flux(cps, cps_err, band):
     return flux, flux_err
 
 
-def absolute_luminosity(flux, dist, z):
+def absolute_luminosity(flux, dist, z, a_v):
     """
-    Converts measured fluxes to absolute luminosities based on distance
+    Converts measured fluxes to absolute luminosities based on distance,
+    accounting for redshift and extinction
     Inputs:
         flux (Array-like): measured fluxes
         dist (float): distance in Mpc
+        z (float): redshift
+        a_v (float): V band extinction in magnitudes
     Outputs:
         absolute luminosity (Array)
     """
 
     cm_Mpc = 3.08568e24 # cm / Mpc
-    luminosity = 4 * np.pi * (dist * cm_Mpc)**2 * (1 + z) ** 2 * flux
+    luminosity = 4 * np.pi * (dist * cm_Mpc)**2 * (1 + z) ** 3 * flux
     return luminosity
 
 
-def absolute_luminosity_err(flux, flux_err, dist, dist_err, z):
+def absolute_luminosity_err(flux, flux_err, dist, dist_err, z, z_err, a_v):
     """
     Converts measured fluxes to absolute luminosities based on distance, and
     also returns corresponding error
@@ -282,6 +310,14 @@ def full_import(sn, band, sn_info):
             lc['flux_bgsub'], lc['flux_bgsub_err_total'], dist, dist_err, z)
     lc['luminosity_hostsub'], lc['luminosity_hostsub_err'] = absolute_luminosity_err(
             lc['flux_hostsub'], lc['flux_hostsub_err'], dist, dist_err, z)
+    
+    # Flux & luminosity density in terms of Hz
+    convert_cols = ['flux_bgsub', 'flux_bgsub_err', 'flux_bgsub_err_total',
+            'flux_hostsub', 'flux_hostsub_err', 'luminosity', 'luminosity_err',
+            'luminosity_hostsub', 'luminosity_hostsub_err']
+    for col in convert_cols:
+        hz_col = col+'_hz'
+        lc[hz_col] = wavelength2freq(lc[col], LAMBDA_EFF[band])
 
     # Convert apparent to absolute magnitudes
     lc['absolute_mag'], lc['absolute_mag_err_1'] = absolute_mag_err(

@@ -60,7 +60,7 @@ def main():
     limit_alpha = 0.6
     nondet_alpha = 0.05
     faint_alpha = 0.3
-    upper_lim = 1e30
+    upper_lim = 1e28
     faint_cutoff = 1e26
     det_ms = 6 # detection marker size
 
@@ -70,16 +70,17 @@ def main():
     # Plot Swift SN2011fe from Brown+ 2012
     SN2011fe = pd.read_csv(Path('external/SN2011fe_Brown2012.tsv'), sep='\t',
             comment='#', skiprows=[45, 46])
+    SN2011fe = SN2011fe[pd.notna(SN2011fe['mag'])]
     SN2011fe['t_delta'] = SN2011fe['MJD'] - Time('2011-08-24', format='iso').mjd
-    lc = SN2011fe[SN2011fe['Filt'] == 'uvw1'].copy() # Just plot near UV for now
+    lc = SN2011fe[SN2011fe['Filt'] == 'uvm2'].copy() # Just plot near UV for now
     dist = 6.4 # Mpc; from Shappee & Stanek 2011
     z = 0 # too close to need correction
     a_v = 0 # won't worry about it right now
     a_band = 'NUV' # close enough
-    lc['FluxDensity'], lc['e_FluxDensity'] = swift_cps2flux(lc['CRate'], lc['e_CRate'], 'UVW1')
+    lc['FluxDensity'], lc['e_FluxDensity'] = swift_cps2flux(lc['CRate'], lc['e_CRate'], 'UVM2')
     lc['Luminosity'] = flux2luminosity(lc['FluxDensity'], dist, z, a_v, a_band)
-    lc['Luminosity_hz'] = wavelength2freq(lc['Luminosity'], 2684.1)
-    ax.plot(lc['t_delta'], lc['Luminosity_hz'], color='brown', label='SN2011fe (UVW1)')
+    lc['Luminosity_hz'] = wavelength2freq(lc['Luminosity'], 2245.8)
+    ax.plot(lc['t_delta'], lc['Luminosity_hz'], color='brown', label='SN2011fe (UVM2)', zorder=1)
 
     # Plot nondetections
     for band in ['FUV', 'NUV']:
@@ -87,13 +88,9 @@ def main():
         faint = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] < faint_cutoff]
         bright = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] >= faint_cutoff]
         ax.scatter(bright['t_delta_rest'], LIMIT_SIGMA * bright['luminosity_hostsub_err_hz'],
-                marker='v', s=16, color=COLORS[band], alpha=nondet_alpha, edgecolors='none')
+                marker='v', s=16, color=COLORS[band], alpha=nondet_alpha, edgecolors='none', zorder=2)
         ax.scatter(faint['t_delta_rest'], LIMIT_SIGMA * faint['luminosity_hostsub_err_hz'],
-                marker='v', s=36, color=COLORS[band], alpha=faint_alpha, edgecolors='none')
-
-    below_graham = nondetections[nondetections['luminosity_hostsub_err'] * LIMIT_SIGMA < 4.3e37]
-    print(len(below_graham.index))
-    print(len(below_graham['name'].drop_duplicates().index))
+                marker='v', s=36, color=COLORS[band], alpha=faint_alpha, edgecolors='none', zorder=3)
 
     below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < 10**25.88]
     print(len(below_graham.index))
@@ -106,18 +103,18 @@ def main():
         ebar = ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
                 yerr=lc_det['luminosity_hostsub_err_hz'], linestyle='none', 
                 label='%s (%s)' % (sn, band), marker=markers[i], ms=det_ms,
-                markeredgecolor='k', color=colors[i], ecolor='k', elinewidth=1)
+                markeredgecolor='k', color=colors[i], ecolor='k', elinewidth=1, zorder=9)
         lc_non = lc[lc['sigma'] <= DET_SIGMA]
         ax.scatter(lc_non['t_delta_rest'], LIMIT_SIGMA * lc_non['luminosity_hostsub_err_hz'],
                 marker='v', s=det_ms**2, color=ebar[0].get_color(),
-                edgecolors='k', alpha=limit_alpha)
+                edgecolors='k', alpha=limit_alpha, zorder=8)
 
     # Plot Graham detections
     # note: Graham uses days past explosion, not discovery
-    ax.scatter(686, 7.6e25, marker='*', s=100, color='w', edgecolors='k', 
-            label='SN2015cp (F275W)')
-    ax.scatter(477, 10**26.06, marker='X', s=64, color='y', edgecolors='k', 
-            label='ASASSN-15og (F275W)')
+    ax.scatter(686, 7.6e25, marker='*', s=100, color='y', edgecolors='k', 
+            label='SN2015cp (F275W)', zorder=10)
+    ax.scatter(477, 10**26.06, marker='X', s=64, color='w', edgecolors='k', 
+            label='ASASSN-15og (F275W)', zorder=10)
 
     ax.set_xlabel('Rest frame time since discovery [days]')
     # ax.set_xlabel('Observed time since discovery [days]')
@@ -136,8 +133,9 @@ def main():
                     markeredgecolor='none', markersize=6, alpha=faint_alpha,
                     label='detection limit (NUV)', lw=0)
     ]
-    plt.legend(handles=handles + legend_elements, loc='upper right', ncol=2,
-            handletextpad=0.4)
+    plt.legend(handles=handles + legend_elements, loc='upper right', ncol=3,
+            handletextpad=0.2, handlelength=1.0)
+
     plt.savefig('out/limits.png', dpi=300)
     if args.show:
         plt.show()

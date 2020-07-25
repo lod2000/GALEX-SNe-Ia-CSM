@@ -189,7 +189,7 @@ def swift_cps2flux(cps, cps_err, band):
     return flux, flux_err
 
 
-def absolute_luminosity(flux, dist, z, a_v):
+def absolute_luminosity(flux, dist, z, a_v, band):
     """
     Converts measured fluxes to absolute luminosities based on distance,
     accounting for redshift and extinction
@@ -203,11 +203,17 @@ def absolute_luminosity(flux, dist, z, a_v):
     """
 
     cm_Mpc = 3.08568e24 # cm / Mpc
-    luminosity = 4 * np.pi * (dist * cm_Mpc)**2 * (1 + z) ** 3 * flux
+    a_band = galex_extinction(a_v, band)
+    # Calculate total luminosity
+    luminosity = 4 * np.pi * (dist * cm_Mpc)**2 * flux
+    # Correct for redshift
+    luminosity *= (1 + z) ** 3
+    # Correct for extinction
+    luminosity *= 10 ** (0.4 * a_band)
     return luminosity
 
 
-def absolute_luminosity_err(flux, flux_err, dist, dist_err, z, z_err, a_v):
+def absolute_luminosity_err(flux, flux_err, dist, dist_err, z, z_err, a_v, band):
     """
     Converts measured fluxes to absolute luminosities based on distance, and
     also returns corresponding error
@@ -220,8 +226,9 @@ def absolute_luminosity_err(flux, flux_err, dist, dist_err, z, z_err, a_v):
         absolute luminosity (Array), luminosity error (Array)
     """
 
-    luminosity = absolute_luminosity(flux, dist, z)
-    err = np.abs(luminosity) * np.sqrt((2*dist_err/dist)**2 + (flux_err/flux)**2)
+    luminosity = absolute_luminosity(flux, dist, z, a_v, band)
+    z_corr_err = np.nan_to_num(3 * z_err / (1+z))
+    err = np.abs(luminosity) * np.sqrt((2*dist_err/dist)**2 + (flux_err/flux)**2 + z_corr_err**2)
     return luminosity, err
 
 
@@ -306,10 +313,14 @@ def full_import(sn, band, sn_info):
     dist = sn_info.loc[sn, 'pref_dist']
     dist_err = sn_info.loc[sn, 'pref_dist_err']
     z = sn_info.loc[sn, 'z']
+    z_err = sn_info.loc[sn, 'z_err']
+    a_v = sn_info.loc[sn, 'a_v']
     lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            lc['flux_bgsub'], lc['flux_bgsub_err_total'], dist, dist_err, z)
+            lc['flux_bgsub'], lc['flux_bgsub_err_total'], dist, dist_err, z, 
+            z_err, a_v, band)
     lc['luminosity_hostsub'], lc['luminosity_hostsub_err'] = absolute_luminosity_err(
-            lc['flux_hostsub'], lc['flux_hostsub_err'], dist, dist_err, z)
+            lc['flux_hostsub'], lc['flux_hostsub_err'], dist, dist_err, z,
+            z_err, a_v, band)
     
     # Flux & luminosity density in terms of Hz
     convert_cols = ['flux_bgsub', 'flux_bgsub_err', 'flux_bgsub_err_total',
@@ -568,8 +579,8 @@ def import_swift_lc(sn, sn_info):
     # Convert to CPS, flux, and luminosity
     lc['cps'], lc['cps_err'] = swift_mag2cps(lc['ab_mag'], lc['ab_mag_err'], lc['band'])
     lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
-    lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            lc['flux'], lc['flux_err'], dist, dist_err, z)
+    # lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
+            # lc['flux'], lc['flux_err'], dist, dist_err, z)
 
     # Correct epoch for stretch factor
     lc['t_delta_rest'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']

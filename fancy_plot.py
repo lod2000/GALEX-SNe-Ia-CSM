@@ -169,7 +169,9 @@ def plot(sn, sn_info, args, output):
 
     # Twin axis with absolute luminosity
     luminosity_ax = ax.twinx()
-    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'pref_dist'], sn_info.loc[sn, 'z'])
+    # Assume FUV for extinction; not that big a difference between the two
+    ylim_luminosity = absolute_luminosity(ylim_flux, sn_info.loc[sn, 'pref_dist'], 
+            sn_info.loc[sn, 'z'], sn_info.loc[sn, 'a_v'], 'FUV')
     if args.log:
         luminosity_ax.set_yscale('log')
         luminosity_ax.set_ylim(ylim_luminosity)

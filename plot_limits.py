@@ -4,6 +4,7 @@ import multiprocessing as mp
 from functools import partial
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import astropy.units as u
 import argparse
 from utils import *
@@ -18,6 +19,7 @@ def main():
             help='re-concatenate detection and nondetection data.')
     parser.add_argument('-s', '--systematics', action='store_true',
             help='plot observation and sample systematics.')
+    parser.add_argument('--show', action='store_true', help='show plot after saving')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
@@ -56,20 +58,38 @@ def main():
 
     ebar_alpha = 0.8
     limit_alpha = 0.6
-    nondet_alpha = 0.1
-    upper_lim = 1e28
+    nondet_alpha = 0.05
+    faint_alpha = 0.3
+    upper_lim = 1e30
+    faint_cutoff = 1e26
+    det_ms = 6 # detection marker size
 
-    markers = ['o', 's', 'p', 'd', 'X', 'P', '*']
+    markers = ['o', 's', 'p', 'd', 'P']
     colors = ['cyan', 'orange', 'green', 'red']
+
+    # Plot Swift SN2011fe from Brown+ 2012
+    SN2011fe = pd.read_csv(Path('external/SN2011fe_Brown2012.tsv'), sep='\t',
+            comment='#', skiprows=[45, 46])
+    SN2011fe['t_delta'] = SN2011fe['MJD'] - Time('2011-08-24', format='iso').mjd
+    lc = SN2011fe[SN2011fe['Filt'] == 'uvw1'].copy() # Just plot near UV for now
+    dist = 6.4 # Mpc; from Shappee & Stanek 2011
+    z = 0 # too close to need correction
+    a_v = 0 # won't worry about it right now
+    a_band = 'NUV' # close enough
+    lc['FluxDensity'], lc['e_FluxDensity'] = swift_cps2flux(lc['CRate'], lc['e_CRate'], 'UVW1')
+    lc['Luminosity'] = flux2luminosity(lc['FluxDensity'], dist, z, a_v, a_band)
+    lc['Luminosity_hz'] = wavelength2freq(lc['Luminosity'], 2684.1)
+    ax.plot(lc['t_delta'], lc['Luminosity_hz'], color='brown', label='SN2011fe (UVW1)')
 
     # Plot nondetections
     for band in ['FUV', 'NUV']:
         lc = nondetections[nondetections['band'] == band]
-        # Convert flux density per angstrom to per Hz
-        ax.scatter(lc['t_delta_rest'], LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'],
-                marker='v', s=25, color=COLORS[band], alpha=nondet_alpha, edgecolors='none')
-        # ax.scatter(lc['t_delta'], 3 * lc['luminosity_hostsub_err_hz'],
-        #         marker='v', s=25, color=COLORS[band], alpha=limit_alpha)
+        faint = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] < faint_cutoff]
+        bright = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] >= faint_cutoff]
+        ax.scatter(bright['t_delta_rest'], LIMIT_SIGMA * bright['luminosity_hostsub_err_hz'],
+                marker='v', s=16, color=COLORS[band], alpha=nondet_alpha, edgecolors='none')
+        ax.scatter(faint['t_delta_rest'], LIMIT_SIGMA * faint['luminosity_hostsub_err_hz'],
+                marker='v', s=36, color=COLORS[band], alpha=faint_alpha, edgecolors='none')
 
     below_graham = nondetections[nondetections['luminosity_hostsub_err'] * LIMIT_SIGMA < 4.3e37]
     print(len(below_graham.index))
@@ -85,29 +105,44 @@ def main():
         lc_det = lc[lc['sigma'] > DET_SIGMA]
         ebar = ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
                 yerr=lc_det['luminosity_hostsub_err_hz'], linestyle='none', 
-                label='%s (%s)' % (sn, band), marker=markers[i], ms=6, elinewidth=1,
-                markeredgecolor='k', color=colors[i])
-        # [bar.set_alpha(ebar_alpha) for bar in ebar[2]]
+                label='%s (%s)' % (sn, band), marker=markers[i], ms=det_ms,
+                markeredgecolor='k', color=colors[i], ecolor='k', elinewidth=1)
         lc_non = lc[lc['sigma'] <= DET_SIGMA]
         ax.scatter(lc_non['t_delta_rest'], LIMIT_SIGMA * lc_non['luminosity_hostsub_err_hz'],
-                marker='v', s=36, color=ebar[0].get_color(), alpha=limit_alpha,
-                edgecolors='k')
+                marker='v', s=det_ms**2, color=ebar[0].get_color(),
+                edgecolors='k', alpha=limit_alpha)
 
     # Plot Graham detections
     # note: Graham uses days past explosion, not discovery
-    ax.scatter(686, 10**25.88, marker='*', s=64, color='w', edgecolors='k', 
+    ax.scatter(686, 7.6e25, marker='*', s=100, color='w', edgecolors='k', 
             label='SN2015cp (F275W)')
+    ax.scatter(477, 10**26.06, marker='X', s=64, color='y', edgecolors='k', 
+            label='ASASSN-15og (F275W)')
 
     ax.set_xlabel('Rest frame time since discovery [days]')
     # ax.set_xlabel('Observed time since discovery [days]')
-    ax.set_xlim((-50, None))
+    ax.set_xlim((-50, np.max(faint['t_delta_rest']) + 50))
     ax.set_ylabel('Luminosity [erg s$^{-1}$ Hz$^{-1}$]')
     ax.set_yscale('log')
     ax.set_ylim((None, upper_lim))
 
-    plt.legend(loc='upper right')
-    plt.savefig('out/limits.png', dpe=300)
-    plt.show()
+    # Legend
+    handles, labels = ax.get_legend_handles_labels()
+    legend_elements = [
+            Line2D([0], [0], marker='v', markerfacecolor=COLORS['FUV'], 
+                    markeredgecolor='none', markersize=6, alpha=faint_alpha,
+                    label='detection limit (FUV)', lw=0),
+            Line2D([0], [0], marker='v', markerfacecolor=COLORS['NUV'], 
+                    markeredgecolor='none', markersize=6, alpha=faint_alpha,
+                    label='detection limit (NUV)', lw=0)
+    ]
+    plt.legend(handles=handles + legend_elements, loc='upper right', ncol=2,
+            handletextpad=0.4)
+    plt.savefig('out/limits.png', dpi=300)
+    if args.show:
+        plt.show()
+    else:
+        plt.close()
 
 
 def add_uniform_columns(df, values, col_names):
@@ -199,7 +234,6 @@ def plot_observation_systematics(all_detections, sn_info):
     print('Longest gap in phase between consecutive points: %s days' % np.max(gaps))
     gaps = all_detections[all_detections['t_delta'] > 0]['t_delta'].diff()
     print('Longest phase gap post-discovery: %s days' % np.max(gaps))
-
 
 
 def plot_sample_systematics(sn_info):

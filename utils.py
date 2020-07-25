@@ -189,7 +189,7 @@ def swift_cps2flux(cps, cps_err, band):
     return flux, flux_err
 
 
-def absolute_luminosity(flux, dist, z, a_v, band):
+def flux2luminosity(flux, dist, z, a_v, band):
     """
     Converts measured fluxes to absolute luminosities based on distance,
     accounting for redshift and extinction
@@ -226,7 +226,7 @@ def absolute_luminosity_err(flux, flux_err, dist, dist_err, z, z_err, a_v, band)
         absolute luminosity (Array), luminosity error (Array)
     """
 
-    luminosity = absolute_luminosity(flux, dist, z, a_v, band)
+    luminosity = flux2luminosity(flux, dist, z, a_v, band)
     z_corr_err = np.nan_to_num(3 * z_err / (1+z))
     err = np.abs(luminosity) * np.sqrt((2*dist_err/dist)**2 + (flux_err/flux)**2 + z_corr_err**2)
     return luminosity, err

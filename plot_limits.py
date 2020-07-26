@@ -140,11 +140,12 @@ def main():
         plt.close()
 
     # Binomial statistics plot
-    fix, ax = plt.subplots()
-    fig.set_tight_layout(True)
+    fig, ax = plt.subplots()
 
     cutoff = 10**25.88
+    # Include all nondetections below the luminosity of 2015cp
     below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff]
+    # Also include limits from near-peak SNe
     below_graham.append(lc_non[lc_non['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff])
     bins = [0, 100, 500, 2500]
     k = []
@@ -161,15 +162,22 @@ def main():
     x_pos = np.arange(len(bins)-1)
 
     ax.errorbar(x_pos, midpoint, yerr=np.abs(bci - midpoint), capsize=10, 
-            marker='o', linestyle='none')
+            marker='o', linestyle='none', ms=10)
+    ax.scatter(2, 0.06, marker='v', color='g', s=225) # Graham late-onset rate
+
     ax.set_xlim((x_pos[0]-0.5, x_pos[-1]+0.5))
     ax.set_xticks(x_pos)
     ax.set_xticklabels(labels)
     ax.tick_params(axis='x', which='minor', bottom=False, top=False)
     ax.set_xlabel('Rest frame time since discovery [days]')
-    ax.set_ylabel('Luminosity [erg s$^{-1}$ Hz$^{-1}$]')
+    ax.set_ylabel('Rate of CSM interaction')
 
-    plt.show()
+    plt.tight_layout()
+    plt.savefig(Path('out/rates.png'), dpi=300)
+    if args.show:
+        plt.show()
+    else:
+        plt.close()
 
 
 def add_uniform_columns(df, values, col_names):

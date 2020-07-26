@@ -6,6 +6,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import astropy.units as u
+from astropy.stats import binom_conf_interval
 import argparse
 from utils import *
 
@@ -72,7 +73,7 @@ def main():
             comment='#', skiprows=[45, 46])
     SN2011fe = SN2011fe[pd.notna(SN2011fe['mag'])]
     SN2011fe['t_delta'] = SN2011fe['MJD'] - Time('2011-08-24', format='iso').mjd
-    lc = SN2011fe[SN2011fe['Filt'] == 'uvm2'].copy() # Just plot near UV for now
+    lc = SN2011fe[SN2011fe['Filt'] == 'uvm2'].copy() # Just plot M2 for now
     dist = 6.4 # Mpc; from Shappee & Stanek 2011
     z = 0 # too close to need correction
     a_v = 0 # won't worry about it right now
@@ -92,10 +93,6 @@ def main():
         ax.scatter(faint['t_delta_rest'], LIMIT_SIGMA * faint['luminosity_hostsub_err_hz'],
                 marker='v', s=36, color=COLORS[band], alpha=faint_alpha, edgecolors='none', zorder=3)
 
-    below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < 10**25.88]
-    print(len(below_graham.index))
-    print(len(below_graham['name'].drop_duplicates().index))
-
     # Plot detections
     for i, (sn, band) in enumerate(det_sne):
         lc = detections[(detections['name'] == sn) & (detections['band'] == band)]
@@ -111,7 +108,7 @@ def main():
 
     # Plot Graham detections
     # note: Graham uses days past explosion, not discovery
-    ax.scatter(686, 7.6e25, marker='*', s=100, color='y', edgecolors='k', 
+    ax.scatter(686, 10**25.88, marker='*', s=100, color='y', edgecolors='k', 
             label='SN2015cp (F275W)', zorder=10)
     ax.scatter(477, 10**26.06, marker='X', s=64, color='w', edgecolors='k', 
             label='ASASSN-15og (F275W)', zorder=10)
@@ -141,6 +138,38 @@ def main():
         plt.show()
     else:
         plt.close()
+
+    # Binomial statistics plot
+    fix, ax = plt.subplots()
+    fig.set_tight_layout(True)
+
+    cutoff = 10**25.88
+    below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff]
+    below_graham.append(lc_non[lc_non['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff])
+    bins = [0, 100, 500, 2500]
+    k = []
+    n = []
+    labels = []
+    for i in range(len(bins)-1):
+        limits = below_graham[(below_graham['t_delta_rest'] >= bins[i]) & (below_graham['t_delta_rest'] < bins[i+1])]
+        discrete_sne = limits.drop_duplicates('name')
+        k.append(0)
+        n.append(len(discrete_sne.index))
+        labels.append('%s - %s' % (bins[i], bins[i+1]))
+    bci = binom_conf_interval(k, n, interval='jeffreys')
+    midpoint = np.mean(bci, axis=0)
+    x_pos = np.arange(len(bins)-1)
+
+    ax.errorbar(x_pos, midpoint, yerr=np.abs(bci - midpoint), capsize=10, 
+            marker='o', linestyle='none')
+    ax.set_xlim((x_pos[0]-0.5, x_pos[-1]+0.5))
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(labels)
+    ax.tick_params(axis='x', which='minor', bottom=False, top=False)
+    ax.set_xlabel('Rest frame time since discovery [days]')
+    ax.set_ylabel('Luminosity [erg s$^{-1}$ Hz$^{-1}$]')
+
+    plt.show()
 
 
 def add_uniform_columns(df, values, col_names):

@@ -78,33 +78,37 @@ def main():
     z = 0 # too close to need correction
     a_v = 0 # won't worry about it right now
     a_band = 'NUV' # close enough
-    lc['FluxDensity'], lc['e_FluxDensity'] = swift_cps2flux(lc['CRate'], lc['e_CRate'], 'UVM2')
+    lc['FluxDensity'], lc['e_FluxDensity'] = swift_cps2flux(lc['CRate'], 
+            lc['e_CRate'], 'UVM2')
     lc['Luminosity'] = flux2luminosity(lc['FluxDensity'], dist, z, a_v, a_band)
     lc['Luminosity_hz'] = wavelength2freq(lc['Luminosity'], 2245.8)
-    ax.plot(lc['t_delta'], lc['Luminosity_hz'], color='brown', label='SN2011fe (UVM2)', zorder=1)
+    ax.plot(lc['t_delta'], lc['Luminosity_hz'], color='brown', 
+            label='SN2011fe (UVM2)', zorder=1)
 
     # Plot nondetections
     for band in ['FUV', 'NUV']:
         lc = nondetections[nondetections['band'] == band]
-        faint = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] < faint_cutoff]
+        # Make distant (bright) limits smaller
         bright = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] >= faint_cutoff]
-        ax.scatter(bright['t_delta_rest'], LIMIT_SIGMA * bright['luminosity_hostsub_err_hz'],
-                marker='v', s=16, color=COLORS[band], alpha=nondet_alpha, edgecolors='none', zorder=2)
-        ax.scatter(faint['t_delta_rest'], LIMIT_SIGMA * faint['luminosity_hostsub_err_hz'],
-                marker='v', s=36, color=COLORS[band], alpha=faint_alpha, edgecolors='none', zorder=3)
+        plot_luminosity_limit(ax, bright, s=16, c=COLORS[band], a=nondet_alpha, 
+                e='none', z=2)
+        # Make close (faint) limits bigger
+        faint = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] < faint_cutoff]
+        plot_luminosity_limit(ax, faint, s=36, c=COLORS[band], a=faint_alpha, 
+                e='none', z=3)
 
-    # Plot detections
+    # Plot ner-peak and CSM detections
     for i, (sn, band) in enumerate(det_sne):
         lc = detections[(detections['name'] == sn) & (detections['band'] == band)]
         lc_det = lc[lc['sigma'] > DET_SIGMA]
-        ebar = ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
+        ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
                 yerr=lc_det['luminosity_hostsub_err_hz'], linestyle='none', 
                 label='%s (%s)' % (sn, band), marker=markers[i], ms=det_ms,
                 markeredgecolor='k', color=colors[i], ecolor='k', elinewidth=1, zorder=9)
         lc_non = lc[lc['sigma'] <= DET_SIGMA]
-        ax.scatter(lc_non['t_delta_rest'], LIMIT_SIGMA * lc_non['luminosity_hostsub_err_hz'],
-                marker='v', s=det_ms**2, color=ebar[0].get_color(),
-                edgecolors='k', alpha=limit_alpha, zorder=8)
+        # Plot nondetection limits of near-peak SNe
+        plot_luminosity_limit(ax, lc_non, s=det_ms**2, c=colors[i], 
+                a=limit_alpha, e='k', z=8)
 
     # Plot Graham detections
     # note: Graham uses days past explosion, not discovery
@@ -133,7 +137,7 @@ def main():
     plt.legend(handles=handles + legend_elements, loc='upper right', ncol=3,
             handletextpad=0.2, handlelength=1.0)
 
-    plt.savefig('out/limits.png', dpi=300)
+    plt.savefig(Path('figs/limits.png'), dpi=300)
     if args.show:
         plt.show()
     else:
@@ -143,10 +147,12 @@ def main():
     fig, ax = plt.subplots()
 
     cutoff = 10**25.88
+    conf_level = 0.95
     # Include all nondetections below the luminosity of 2015cp
     below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff]
     # Also include limits from near-peak SNe
     below_graham.append(lc_non[lc_non['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff])
+    print('Number of SNe with limits fainter than 2015cp: %s' % len(below_graham.drop_duplicates('name').index))
     bins = [0, 100, 500, 2500]
     k = []
     n = []
@@ -157,13 +163,26 @@ def main():
         k.append(0)
         n.append(len(discrete_sne.index))
         labels.append('%s - %s' % (bins[i], bins[i+1]))
-    bci = binom_conf_interval(k, n, interval='jeffreys')
+    bci = binom_conf_interval(k, n, confidence_level=conf_level, interval='jeffreys')
     midpoint = np.mean(bci, axis=0)
     x_pos = np.arange(len(bins)-1)
 
     ax.errorbar(x_pos, midpoint, yerr=np.abs(bci - midpoint), capsize=10, 
-            marker='o', linestyle='none', ms=10)
-    ax.scatter(2, 0.06, marker='v', color='g', s=225) # Graham late-onset rate
+            marker='o', linestyle='none', ms=10, mec='r', c='r', mfc='w')
+    # Confidence interval & assumed late-onset rate from Graham 2019
+    graham_rate = 0.06
+    graham_bci = binom_conf_interval(1, 64, confidence_level=conf_level, interval='jeffreys')
+    ax.errorbar([2.1], [graham_rate], yerr=([graham_rate - graham_bci[0]], [graham_bci[1] - graham_rate]),
+            marker='v', color='g', linestyle='none', ms=15, capsize=10)
+    ax.annotate('G19', (2.1, graham_rate), textcoords='offset points', 
+            xytext=(10, 0), ha='left', va='center', size=18, color='g')
+    # Confidence interval from Yao 2019
+    ztf_bci = binom_conf_interval(1, 127, confidence_level=conf_level, interval='jeffreys')
+    ztf_mean = np.mean(ztf_bci)
+    ax.errorbar([0.1], [ztf_mean], yerr=([ztf_mean - ztf_bci[0]], [ztf_bci[1] - ztf_mean]),
+            marker='v', color='b', linestyle='none', ms=0, capsize=10)
+    ax.annotate('ZTF', (0.1, ztf_mean), textcoords='offset points', 
+            xytext=(10, 0), ha='left', va='center', size=18, color='b')
 
     ax.set_xlim((x_pos[0]-0.5, x_pos[-1]+0.5))
     ax.set_xticks(x_pos)
@@ -173,11 +192,22 @@ def main():
     ax.set_ylabel('Rate of CSM interaction')
 
     plt.tight_layout()
-    plt.savefig(Path('out/rates.png'), dpi=300)
+    plt.savefig(Path('figs/rates.png'), dpi=300)
     if args.show:
         plt.show()
     else:
         plt.close()
+
+
+def plot_luminosity_limit(ax, data, s=36, c='k', a=1.0, e='none', z=1):
+    """
+    Plots nondetection limits.
+    Optional inputs: size, color, alpha, edge color, zorder
+    """
+    
+    dt = data['t_delta_rest']
+    limit = LIMIT_SIGMA * data['luminosity_hostsub_err_hz']
+    ax.scatter(dt, limit, marker='v', s=s, color=c, alpha=a, edgecolors=e, zorder=z)
 
 
 def add_uniform_columns(df, values, col_names):

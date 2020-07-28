@@ -21,6 +21,8 @@ def main():
     parser.add_argument('-s', '--systematics', action='store_true',
             help='plot observation and sample systematics.')
     parser.add_argument('--show', action='store_true', help='show plot after saving')
+    parser.add_argument('--presentation', action='store_true',
+            help='configure plots for presentation')
     args = parser.parse_args()
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
@@ -62,28 +64,51 @@ def main():
     nondet_alpha = 0.05
     faint_alpha = 0.3
     upper_lim = 1e28
+    lower_lim = 1e22 if args.presentation else None
     cutoff = 10**25.88 # Graham 2015cp detection
     det_ms = 6 # detection marker size
 
     markers = ['o', 's', 'p', 'd', 'P']
-    colors = ['cyan', 'orange', 'green', 'red']
+    colors = ['cyan', 'orange', 'green', 'magenta']
 
     # Plot Swift SN2011fe from Brown+ 2012
+    if args.presentation:
+        band = 'UVW1'
+    else:
+        band = 'UVM2'
     SN2011fe = pd.read_csv(Path('external/SN2011fe_Brown2012.tsv'), sep='\t',
             comment='#', skiprows=[45, 46])
     SN2011fe = SN2011fe[pd.notna(SN2011fe['mag'])]
     SN2011fe['t_delta'] = SN2011fe['MJD'] - Time('2011-08-24', format='iso').mjd
-    lc = SN2011fe[SN2011fe['Filt'] == 'uvm2'].copy() # Just plot M2 for now
+    lc = SN2011fe[SN2011fe['Filt'] == band.lower()].copy()
     dist = 6.4 # Mpc; from Shappee & Stanek 2011
     z = 0 # too close to need correction
     a_v = 0 # won't worry about it right now
     a_band = 'NUV' # close enough
     lc['FluxDensity'], lc['e_FluxDensity'] = swift_cps2flux(lc['CRate'], 
-            lc['e_CRate'], 'UVM2')
+            lc['e_CRate'], band)
     lc['Luminosity'] = flux2luminosity(lc['FluxDensity'], dist, z, a_v, a_band)
     lc['Luminosity_hz'] = wavelength2freq(lc['Luminosity'], 2245.8)
     ax.plot(lc['t_delta'], lc['Luminosity_hz'], color='brown', 
-            label='SN2011fe (UVM2)', zorder=1)
+            label='SN2011fe (%s)' % band, zorder=1)
+
+    # Plot near-peak and CSM detections
+    for i, (sn, band) in enumerate(det_sne):
+        lc = detections[(detections['name'] == sn) & (detections['band'] == band)]
+        lc_det = lc[lc['sigma'] > DET_SIGMA]
+        lc_non = lc[lc['sigma'] <= DET_SIGMA]
+        if args.presentation:
+            # Plot nondetection limits of near-peak SNe
+            plot_luminosity_limit(ax, lc_non, s=36, c=COLORS[band], 
+                    a=faint_alpha, e='none', z=2)
+        else:
+            ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
+                    yerr=lc_det['luminosity_hostsub_err_hz'], linestyle='none', 
+                    label='%s (%s)' % (sn, band), marker=markers[i], ms=det_ms,
+                    markeredgecolor='k', color=colors[i], ecolor='k', elinewidth=1, zorder=9)
+            # Plot nondetection limits of near-peak SNe
+            plot_luminosity_limit(ax, lc_non, s=det_ms**2, c=colors[i], 
+                    a=limit_alpha, e='k', z=8)
 
     # Plot nondetections
     for band in ['FUV', 'NUV']:
@@ -97,32 +122,22 @@ def main():
         plot_luminosity_limit(ax, faint, s=36, c=COLORS[band], a=faint_alpha, 
                 e='none', z=3)
 
-    # Plot ner-peak and CSM detections
-    for i, (sn, band) in enumerate(det_sne):
-        lc = detections[(detections['name'] == sn) & (detections['band'] == band)]
-        lc_det = lc[lc['sigma'] > DET_SIGMA]
-        ax.errorbar(lc_det['t_delta_rest'], lc_det['luminosity_hostsub_hz'],
-                yerr=lc_det['luminosity_hostsub_err_hz'], linestyle='none', 
-                label='%s (%s)' % (sn, band), marker=markers[i], ms=det_ms,
-                markeredgecolor='k', color=colors[i], ecolor='k', elinewidth=1, zorder=9)
-        lc_non = lc[lc['sigma'] <= DET_SIGMA]
-        # Plot nondetection limits of near-peak SNe
-        plot_luminosity_limit(ax, lc_non, s=det_ms**2, c=colors[i], 
-                a=limit_alpha, e='k', z=8)
-
     # Plot Graham detections
     # note: Graham uses days past explosion, not discovery
-    ax.scatter(686, 10**25.88, marker='*', s=100, color='y', edgecolors='k', 
-            label='SN2015cp (F275W)', zorder=10)
-    ax.scatter(477, 10**26.06, marker='X', s=64, color='w', edgecolors='k', 
-            label='ASASSN-15og (F275W)', zorder=10)
+    if args.presentation:
+        ax.axhline(y=cutoff, color='r', label='SN2015cp (F275W)', zorder=10)
+    else:
+        ax.scatter(686, 10**25.88, marker='*', s=100, color='r', edgecolors='k', 
+                label='SN2015cp (F275W)', zorder=10)
+        ax.scatter(477, 10**26.06, marker='X', s=64, color='y', edgecolors='k', 
+                label='ASASSN-15og (F275W)', zorder=10)
 
     ax.set_xlabel('Rest frame time since discovery [days]')
     # ax.set_xlabel('Observed time since discovery [days]')
     ax.set_xlim((-50, np.max(faint['t_delta_rest']) + 50))
     ax.set_ylabel('Luminosity [erg s$^{-1}$ Hz$^{-1}$]')
     ax.set_yscale('log')
-    ax.set_ylim((None, upper_lim))
+    ax.set_ylim((lower_lim, upper_lim))
 
     # Legend
     handles, labels = ax.get_legend_handles_labels()
@@ -134,7 +149,8 @@ def main():
                     markeredgecolor='none', markersize=6, alpha=faint_alpha,
                     label='detection limit (NUV)', lw=0)
     ]
-    plt.legend(handles=handles + legend_elements, loc='upper right', ncol=3,
+    ncol = 2 if args.presentation else 3
+    plt.legend(handles=handles + legend_elements, loc='upper right', ncol=ncol,
             handletextpad=0.2, handlelength=1.0)
 
     plt.savefig(Path('figs/limits.png'), dpi=300)
@@ -193,9 +209,9 @@ def main():
     ax.set_ylabel('Rate of CSM interaction [%]')
 
     # Preliminary!
-    fig.text(0.95, 0.05, 'PRELIMINARY',
-         fontsize=72, color='gray', rotation='30',
-         ha='right', va='bottom', alpha=0.5)
+    if args.presentation:
+        fig.text(0.95, 0.05, 'PRELIMINARY', fontsize=72, color='gray', 
+                rotation='30', ha='right', va='bottom', alpha=0.5)
 
     plt.tight_layout()
     plt.legend()

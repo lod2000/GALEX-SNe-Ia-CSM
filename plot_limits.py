@@ -62,7 +62,7 @@ def main():
     nondet_alpha = 0.05
     faint_alpha = 0.3
     upper_lim = 1e28
-    faint_cutoff = 1e26
+    cutoff = 10**25.88 # Graham 2015cp detection
     det_ms = 6 # detection marker size
 
     markers = ['o', 's', 'p', 'd', 'P']
@@ -89,11 +89,11 @@ def main():
     for band in ['FUV', 'NUV']:
         lc = nondetections[nondetections['band'] == band]
         # Make distant (bright) limits smaller
-        bright = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] >= faint_cutoff]
+        bright = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] >= cutoff]
         plot_luminosity_limit(ax, bright, s=16, c=COLORS[band], a=nondet_alpha, 
                 e='none', z=2)
         # Make close (faint) limits bigger
-        faint = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] < faint_cutoff]
+        faint = lc[LIMIT_SIGMA * lc['luminosity_hostsub_err_hz'] < cutoff]
         plot_luminosity_limit(ax, faint, s=36, c=COLORS[band], a=faint_alpha, 
                 e='none', z=3)
 
@@ -146,7 +146,6 @@ def main():
     # Binomial statistics plot
     fig, ax = plt.subplots()
 
-    cutoff = 10**25.88
     conf_level = 0.95
     # Include all nondetections below the luminosity of 2015cp
     below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff]

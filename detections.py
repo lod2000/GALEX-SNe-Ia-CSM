@@ -37,14 +37,7 @@ def main():
         EMPTY_LC_FILE.unlink()
 
     # Initialize output DataFrames
-    # flagged_points = []    
-    # total_points = 0
     detected_sne = []
-    detections = []
-    nondetections = []
-    # bg_list = []
-    # bg_loc = []
-    # exptimes = np.array([])
 
     # Data flags are in binary
     # flags = [int(2 ** n) for n in range(0,10)]
@@ -63,35 +56,6 @@ def main():
     detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 
             'Max Sigma', 'Background', 'Background Error', 'Systematic Error'])
     output_csv(detected_sne, 'out/candidate_detections.csv', index=False)
-
-    # Limit plot
-    # fig = plt.figure(figsize=(11, 7))
-    # ax = fig.add_axes([0.1, 0.1, 0.6, 0.8])
-
-    # print('Plotting nondetection limits...')
-    # bins = np.arange(-2735, 3105, 365)
-    # for lc in tqdm(nondetections):
-    #     # lc['group'] = ((lc['t_delta'] + 3100) / 365).astype(int)
-    #     group_max = [lc[lc['group'] == g]['luminosity_hostsub_err'].max() for g in np.arange(17)]
-    #     ax.scatter(lc['t_delta'], lc['luminosity_hostsub_err'] * args.sigma, 
-    #             marker=11, color=COLORS[band], s=20, alpha=0.1)
-
-    # print('Plotting detections...')
-    # for lc in tqdm(detections):
-    #     sn = lc['name'].iloc[0]
-    #     band = lc['band'].iloc[0]
-    #     ax.errorbar(lc['t_delta'], lc['luminosity_hostsub'], linestyle='none', 
-    #             yerr=lc['luminosity_hostsub_err'], ms=4, 
-    #             elinewidth=1, label='%s (%s)' % (sn, band))
-
-    # ax.set_xlim((DT_MIN, None))
-    # ax.set_xlabel('Time since discovery [days]')
-    # ax.set_ylabel('Luminosity [erg s$^{-1}$ Å$^{-1}$]')
-    # ax.set_yscale('log')
-    # # ax.set_ylim((1e20, 1e30))
-    # plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
-    # plt.savefig('out/limits.png', dpi=500, bbox_inches='tight')
-    # plt.show()
 
 
 def detect_sn(sn, sn_info, args):
@@ -115,7 +79,6 @@ def detect_sn(sn, sn_info, args):
             continue
 
         # Host background & systematic error
-        # bg, bg_err, sys_err = get_background(lc, band)
         # Detect if 3 points above 3 sigma, or 1 point above 5 sigma
         threshold = 5
         lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
@@ -128,11 +91,6 @@ def detect_sn(sn, sn_info, args):
         elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
             detected_sne.append(detection)
         detections = lc[lc['sigma_above'] >= threshold].index
-            # detections.append(lc[lc['sigma_above'] > 5])
-            # nondetections.append(lc[lc['sigma_above'] < 5])
-        # else:
-            # nondetections.append(lc)
-        # nondetections = lc[lc['sigma_above'] < threshold]
 
         if make_plot:
             # Plot data from this band

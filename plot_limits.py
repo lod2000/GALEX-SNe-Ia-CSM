@@ -146,7 +146,7 @@ def main():
     # Binomial statistics plot
     fig, ax = plt.subplots()
 
-    conf_level = 0.95
+    conf_level = 0.9
     # Include all nondetections below the luminosity of 2015cp
     below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff]
     # Also include limits from near-peak SNe
@@ -162,35 +162,43 @@ def main():
         k.append(0)
         n.append(len(discrete_sne.index))
         labels.append('%s - %s' % (bins[i], bins[i+1]))
-    bci = binom_conf_interval(k, n, confidence_level=conf_level, interval='jeffreys')
+    bci = 100 * binom_conf_interval(k, n, confidence_level=conf_level, interval='jeffreys')
     midpoint = np.mean(bci, axis=0)
     x_pos = np.arange(len(bins)-1)
 
     ax.errorbar(x_pos, midpoint, yerr=np.abs(bci - midpoint), capsize=10, 
-            marker='o', linestyle='none', ms=10, mec='r', c='r', mfc='w')
-    # Confidence interval & assumed late-onset rate from Graham 2019
-    graham_rate = 0.06
-    graham_bci = binom_conf_interval(1, 64, confidence_level=conf_level, interval='jeffreys')
-    ax.errorbar([2.1], [graham_rate], yerr=([graham_rate - graham_bci[0]], [graham_bci[1] - graham_rate]),
-            marker='v', color='g', linestyle='none', ms=15, capsize=10)
-    ax.annotate('G19', (2.1, graham_rate), textcoords='offset points', 
-            xytext=(10, 0), ha='left', va='center', size=18, color='g')
+            marker='o', linestyle='none', ms=10, mec='r', c='r', mfc='w',
+            label='This study')
     # Confidence interval from Yao 2019
-    ztf_bci = binom_conf_interval(1, 127, confidence_level=conf_level, interval='jeffreys')
+    ztf_bci = 100 * binom_conf_interval(1, 127, confidence_level=conf_level, interval='jeffreys')
     ztf_mean = np.mean(ztf_bci)
     ax.errorbar([0.1], [ztf_mean], yerr=([ztf_mean - ztf_bci[0]], [ztf_bci[1] - ztf_mean]),
-            marker='v', color='b', linestyle='none', ms=0, capsize=10)
-    ax.annotate('ZTF', (0.1, ztf_mean), textcoords='offset points', 
-            xytext=(10, 0), ha='left', va='center', size=18, color='b')
+            marker='o', c='b', linestyle='none', ms=10, capsize=10, mec='b', mfc='w',
+            label='ZTF')
+    # ax.annotate('ZTF', (0.1, ztf_mean), textcoords='offset points', 
+    #         xytext=(10, 0), ha='left', va='center', size=18, color='b')
+    # Confidence interval & assumed late-onset rate from Graham 2019
+    graham_rate = 6
+    graham_bci = 100 * binom_conf_interval(1, 64, confidence_level=conf_level, interval='jeffreys')
+    ax.errorbar([2.1], [graham_rate], yerr=([graham_rate - graham_bci[0]], [graham_bci[1] - graham_rate]),
+            marker='v', color='g', linestyle='none', ms=15, capsize=10, label='G19')
+    # ax.annotate('G19', (2.1, graham_rate), textcoords='offset points', 
+    #         xytext=(10, 0), ha='left', va='center', size=18, color='g')
 
     ax.set_xlim((x_pos[0]-0.5, x_pos[-1]+0.5))
     ax.set_xticks(x_pos)
     ax.set_xticklabels(labels)
     ax.tick_params(axis='x', which='minor', bottom=False, top=False)
     ax.set_xlabel('Rest frame time since discovery [days]')
-    ax.set_ylabel('Rate of CSM interaction')
+    ax.set_ylabel('Rate of CSM interaction [%]')
+
+    # Preliminary!
+    fig.text(0.95, 0.05, 'PRELIMINARY',
+         fontsize=72, color='gray', rotation='30',
+         ha='right', va='bottom', alpha=0.5)
 
     plt.tight_layout()
+    plt.legend()
     plt.savefig(Path('figs/rates.png'), dpi=300)
     if args.show:
         plt.show()

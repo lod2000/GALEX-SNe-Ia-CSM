@@ -193,7 +193,7 @@ def plot_swift(ax, sn, sn_info, yscale, args):
     lc = lc[lc['t_delta'] <= args.max]
     bands = ['UVW1', 'UVM2', 'UVW2']
     for band in bands:
-        data = lc[lc['band'] == band]
+        data = lc[lc['Filter'] == band]
         if args.restframe:
             dt = data['t_delta_rest']
         else:

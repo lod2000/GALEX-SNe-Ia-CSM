@@ -98,7 +98,7 @@ GALEX_ZERO_POINT    = {'FUV': 18.82, 'NUV': 20.08}
 GALEX_FLUX_FACTOR   = {'FUV': 1.4e-15, 'NUV': 2.06e-16}
 # Bianchi values for Milky Way extinction (over E(B-V)), from Table 2
 GALEX_EXTINCTION    = {'FUV': 8.06, 'NUV': 7.95, 'U': 4.72, 'B': 4.02, 'V': 3.08}
-# Poole et al. 2007
+# Poole et al. 2008 (per Angstrom)
 SWIFT_ZERO_POINT    = {'V': 17.89, 'B': 19.11, 'U': 18.34, 'UVW1': 17.49, 
                        'UVM2': 16.82, 'UVW2': 17.35}
 SWIFT_ZERO_ERROR    = {'V': 0.013, 'B': 0.016, 'U': 0.020, 'UVW1': 0.03, 
@@ -559,31 +559,38 @@ def import_swift_lc(sn, sn_info):
     Imports light curve file from an external source (e.g. Swift)
     """
 
-    # Read CSV and select only Swift UVOT data
-    lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_phot.csv' % sn))
-    lc = lc[(lc['telescope'] == 'Swift') & (lc['instrument'] == 'UVOT') & (lc['upperlimit'] == 'F')]
+    # Read CSV
+    lc = pd.read_csv(EXTERNAL_LC_DIR / Path('%s_uvotB15.1.dat' % sn), sep='\s+',
+            names=['Filter', 'MJD', 'Mag', 'MagErr', '3SigMagLim', '0.98SatLim', 
+            'Rate', 'RateErr', 'Ap', 'Frametime', 'Exp', 'Telapse'], comment='#')
+    # Remove limits
+    lc = lc[pd.notna(lc['Mag'])]
+    # lc = lc[(lc['telescope'] == 'Swift') & (lc['instrument'] == 'UVOT') & (lc['upperlimit'] == 'F')]
 
     # Add days relative to discovery date
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
-    lc['t_delta'] = lc['time'] - disc_date.mjd
-
-    # AB apparent and absolute magnitudes
-    dist = sn_info.loc[sn, 'pref_dist']
-    dist_err = sn_info.loc[sn, 'pref_dist_err']
-    z = sn_info.loc[sn, 'z']
-    lc['ab_mag'], lc['ab_mag_err'] = swift_vega2ab(
-            lc['magnitude'], lc['e_magnitude'], lc['band'])
-    lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag_err(
-            lc['ab_mag'], lc['ab_mag_err'], dist, dist_err)
-
-    # Convert to CPS, flux, and luminosity
-    lc['cps'], lc['cps_err'] = swift_mag2cps(lc['ab_mag'], lc['ab_mag_err'], lc['band'])
-    lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
-    # lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            # lc['flux'], lc['flux_err'], dist, dist_err, z)
+    lc['t_delta'] = lc['MJD'] - disc_date.mjd
 
     # Correct epoch for stretch factor
     lc['t_delta_rest'] = 1 / (1 + sn_info.loc[sn, 'z']) * lc['t_delta']
+
+    # Convert CPS to flux
+    lc['flux'], lc['flux_err'] = swift_cps2flux(lc['Rate'], lc['RateErr'], lc['Filter'])
+
+    # AB apparent and absolute magnitudes
+    # dist = sn_info.loc[sn, 'pref_dist']
+    # dist_err = sn_info.loc[sn, 'pref_dist_err']
+    # z = sn_info.loc[sn, 'z']
+    # lc['ab_mag'], lc['ab_mag_err'] = swift_vega2ab(
+    #         lc['magnitude'], lc['e_magnitude'], lc['band'])
+    # lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag_err(
+    #         lc['ab_mag'], lc['ab_mag_err'], dist, dist_err)
+
+    # Convert to CPS, flux, and luminosity
+    # lc['cps'], lc['cps_err'] = swift_mag2cps(lc['ab_mag'], lc['ab_mag_err'], lc['band'])
+    # lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
+    # lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
+            # lc['flux'], lc['flux_err'], dist, dist_err, z)
 
     return lc
 

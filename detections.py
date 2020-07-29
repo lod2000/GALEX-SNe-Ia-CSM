@@ -54,7 +54,7 @@ def main():
     # List of SNe with detections
     detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
     detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 
-            'Max Sigma', 'Background', 'Background Error', 'Systematic Error'])
+            'Max Sigma', 'Background', 'Background Error', 'Systematic Error', 'Images'])
     output_csv(detected_sne, 'out/candidate_detections.csv', index=False)
 
 
@@ -80,16 +80,19 @@ def detect_sn(sn, sn_info, args):
 
         # Host background & systematic error
         # Detect if 3 points above 3 sigma, or 1 point above 5 sigma
-        threshold = 5
+        threshold = 3
         lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
         lc.insert(0, 'name', np.array([sn] * len(lc.index)))
         lc.insert(1, 'band', np.array([band] * len(lc.index)))
-        detection = [sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err]
-        if len(lc[lc['sigma_above'] >= 3].index) >= 3:
-            detected_sne.append(detection)
+        after = lc[lc['t_delta'] > DT_MIN]
+        high_sigma = after[after['sigma_above'] >= 3]
+        high_sigma_idx = ','.join(high_sigma.index.astype(str))
+        entry = [sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err, high_sigma_idx]
+        if len(high_sigma.index) >= 1:
+            detected_sne.append(entry)
             threshold = 3
-        elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
-            detected_sne.append(detection)
+        # elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
+        #     detected_sne.append(entry)
         detections = lc[lc['sigma_above'] >= threshold].index
 
         if make_plot:

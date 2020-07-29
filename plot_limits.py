@@ -167,7 +167,10 @@ def main():
     below_graham = nondetections[nondetections['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff]
     # Also include limits from near-peak SNe
     below_graham.append(lc_non[lc_non['luminosity_hostsub_err_hz'] * LIMIT_SIGMA < cutoff])
+    # Only those after discovery
+    below_graham = below_graham[below_graham['t_delta_rest'] > 0]
     print('Number of SNe with limits fainter than 2015cp: %s' % len(below_graham.drop_duplicates('name').index))
+    print('Number of observations with limits fainter than 2015cp: %s' % len(below_graham.index))
     bins = [0, 100, 500, 2500]
     k = []
     n = []
@@ -178,7 +181,10 @@ def main():
         k.append(0)
         n.append(len(discrete_sne.index))
         labels.append('%s - %s' % (bins[i], bins[i+1]))
+    print(bins)
+    print(n)
     bci = 100 * binom_conf_interval(k, n, confidence_level=conf_level, interval='jeffreys')
+    print(bci)
     midpoint = np.mean(bci, axis=0)
     x_pos = np.arange(len(bins)-1)
 
@@ -187,6 +193,7 @@ def main():
             label='This study')
     # Confidence interval from Yao 2019
     ztf_bci = 100 * binom_conf_interval(1, 127, confidence_level=conf_level, interval='jeffreys')
+    print(ztf_bci)
     ztf_mean = np.mean(ztf_bci)
     ax.errorbar([0.1], [ztf_mean], yerr=([ztf_mean - ztf_bci[0]], [ztf_bci[1] - ztf_mean]),
             marker='o', c='b', linestyle='none', ms=10, capsize=10, mec='b', mfc='w',
@@ -196,6 +203,7 @@ def main():
     # Confidence interval & assumed late-onset rate from Graham 2019
     graham_rate = 6
     graham_bci = 100 * binom_conf_interval(1, 64, confidence_level=conf_level, interval='jeffreys')
+    print(graham_bci)
     ax.errorbar([2.1], [graham_rate], yerr=([graham_rate - graham_bci[0]], [graham_bci[1] - graham_rate]),
             marker='v', color='g', linestyle='none', ms=15, capsize=10, label='G19')
     # ax.annotate('G19', (2.1, graham_rate), textcoords='offset points', 

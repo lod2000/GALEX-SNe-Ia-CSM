@@ -565,7 +565,6 @@ def import_swift_lc(sn, sn_info):
             'Rate', 'RateErr', 'Ap', 'Frametime', 'Exp', 'Telapse'], comment='#')
     # Remove limits
     lc = lc[pd.notna(lc['Mag'])]
-    # lc = lc[(lc['telescope'] == 'Swift') & (lc['instrument'] == 'UVOT') & (lc['upperlimit'] == 'F')]
 
     # Add days relative to discovery date
     disc_date = Time(sn_info.loc[sn, 'disc_date'], format='iso')
@@ -576,21 +575,6 @@ def import_swift_lc(sn, sn_info):
 
     # Convert CPS to flux
     lc['flux'], lc['flux_err'] = swift_cps2flux(lc['Rate'], lc['RateErr'], lc['Filter'])
-
-    # AB apparent and absolute magnitudes
-    # dist = sn_info.loc[sn, 'pref_dist']
-    # dist_err = sn_info.loc[sn, 'pref_dist_err']
-    # z = sn_info.loc[sn, 'z']
-    # lc['ab_mag'], lc['ab_mag_err'] = swift_vega2ab(
-    #         lc['magnitude'], lc['e_magnitude'], lc['band'])
-    # lc['absolute_mag'], lc['absolute_mag_err'] = absolute_mag_err(
-    #         lc['ab_mag'], lc['ab_mag_err'], dist, dist_err)
-
-    # Convert to CPS, flux, and luminosity
-    # lc['cps'], lc['cps_err'] = swift_mag2cps(lc['ab_mag'], lc['ab_mag_err'], lc['band'])
-    # lc['flux'], lc['flux_err'] = swift_cps2flux(lc['cps'], lc['cps_err'], lc['band'])
-    # lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
-            # lc['flux'], lc['flux_err'], dist, dist_err, z)
 
     return lc
 

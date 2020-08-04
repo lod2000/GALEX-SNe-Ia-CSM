@@ -54,7 +54,8 @@ def main():
     # List of SNe with detections
     detected_sne = [band for sn in detected_sne for band in sn if len(sn) > 0]
     detected_sne = pd.DataFrame(detected_sne, columns=['Name', 'Band', 
-            'Max Sigma', 'Background', 'Background Error', 'Systematic Error', 'Images'])
+            'Max Sigma', 'Background', 'Background Error', 'Systematic Error', 
+            'Images', 'First Detection'])
     output_csv(detected_sne, 'out/candidate_detections.csv', index=False)
 
 
@@ -88,11 +89,16 @@ def detect_sn(sn, sn_info, args):
         high_sigma = after[after['sigma_above'] >= 3]
         high_sigma_idx = ','.join(high_sigma.index.astype(str))
         entry = [sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err, high_sigma_idx]
-        if len(high_sigma.index) >= 1:
+        if len(high_sigma.index) >= 3:
+            first_det_epoch = high_sigma['t_delta_rest'].iloc[0]
+            entry += [first_det_epoch]
             detected_sne.append(entry)
             threshold = 3
-        # elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
-        #     detected_sne.append(entry)
+        elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
+            first_det_epoch = lc[lc['sigma_above'] >= 5]['t_delta_rest'].iloc[0]
+            entry += [first_det_epoch]
+            detected_sne.append(entry)
+            threshold = 5
         detections = lc[lc['sigma_above'] >= threshold].index
 
         if make_plot:
@@ -100,14 +106,14 @@ def detect_sn(sn, sn_info, args):
             fig, ax = plot_band(fig, ax, lc, band, bg, bg_err, args,
                     color=COLORS[band], detections=detections)
             # Figure out best x limits
-            xmin = min((xmin, np.min(lc['t_delta'])))
-            xmax = max((xmax, np.max(lc['t_delta'])))
+            xmin = np.nanmin((xmin, np.min(lc.loc[detections, 't_delta']), np.min(lc['t_delta'])))
+            xmax = np.nanmax((xmax, np.max(lc.loc[detections, 't_delta']), np.max(lc['t_delta'])))
 
     # Configure plot
     if make_plot:
         if xmax > 0 and len(lc.index) > 0:
             ax.set_xlabel('Observed time since discovery [days]')
-            ax.set_xlim((xmin - 50, xmax + 50))
+            ax.set_xlim((xmin - 100, xmax + 100))
             ax.set_ylabel('Observed flux [erg s^-1 Å^-1 cm^-2]')
             plt.legend()
             fig.suptitle(sn)

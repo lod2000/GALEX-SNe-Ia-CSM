@@ -42,15 +42,6 @@ def main():
         # Look for systematics in observations
         all_detections = nondetections.append(detections)
         all_detections.set_index('name', inplace=True)
-        # low_z = sn_info[sn_info['z'] < 0.07]
-        # Remove SDSS - test
-        # no_sdss = sn_info[~sn_info['posn_ref'].str.contains('SDSS', na=False)]
-        # no_sdss = no_sdss[~no_sdss['z_ref'].str.contains('SDSS', na=False)]
-        # no_sdss = no_sdss[~no_sdss.index.str.contains('SDSS')]
-        # no_sdss = no_sdss[~no_sdss['objname'].str.contains('SDSS', na=False)]
-        # no_sdss = no_sdss.drop(['SNLS-05D3kx', 'SNLS-06D3cn'])
-        # print(len(no_sdss.index))
-        # all_detections = all_detections.loc[no_sdss.index.to_list()]
         plot_observation_systematics(all_detections, sn_info)
         plot_sample_systematics(sn_info)
 

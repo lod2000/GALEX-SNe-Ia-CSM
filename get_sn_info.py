@@ -29,6 +29,8 @@ SN_INFO_FILE = Path('ref/sn_info.csv')
 NED_RESULTS_FILE = Path('ref/ned.csv')
 COSMIC_FLOWS_FILE = Path('ref/qualityDistances.csv')
 HYPERLEDA_FILE = Path('ref/hyperleda.info.cgi')
+TYPE_CATALOG = Path('ref/full_type_catalog.csv')
+TYPE_THRESHOLD = 0.9
 
 
 def main():
@@ -42,7 +44,8 @@ def main():
     args = parser.parse_args()
 
     sn_info = pd.read_csv(SN_INFO_FILE, index_col='name')
-    osc = pd.read_csv(OSC_FILE, index_col='Name')
+    osc = pd.read_csv(OSC_FILE, index_col='Name')           # Open Supernova Catalog
+    types = pd.read_csv(TYPE_CATALOG, index_col='name')     # SN type catalog
 
     if not NED_RESULTS_FILE.is_file():
         args.overwrite = True
@@ -71,9 +74,35 @@ def main():
 
     # Combine sn_info and ned
     sn_info = combine_sn_info(ned, sn_info)
+
+    # Reject SNe with low probability of Ia
+    sn_info = reject_by_type(sn_info, types, plot=True, verb=True)
+
     output_csv(sn_info, SN_INFO_FILE)
 
     plot_redshifts(sn_info)
+
+
+def reject_by_type(sn_info, types, plot=False, verb=False):
+    """
+    Eliminate SNe with probability of being Type Ia less than TYPE_THRESHOLD
+    Inputs:
+        sn_info: DataFrame
+        types: DataFrame
+        plot: if True, plot histogram of rejected redshifts
+        verb: if True, state number of rejected SNe
+    """
+
+    reject = sn_info[types['total'] < TYPE_THRESHOLD]
+    sn_info = sn_info[types['total'] >= TYPE_THRESHOLD]
+
+    if plot:
+        plot_redshifts(reject, fname='rejected_types.png')
+
+    if verb:
+        print('Rejected %s SNe with P(Ia) < %s.' % (len(reject.index), TYPE_THRESHOLD))
+
+    return sn_info
 
 
 def get_sn(sn, sn_info, osc, verb=0):
@@ -267,7 +296,7 @@ def physical_offset(ra1, dec1, ra2, dec2, h_dist):
     return offset
 
 
-def plot_redshifts(ned, bin_width=0.025):
+def plot_redshifts(ned, bin_width=0.025, fname='redshifts.png'):
     """
     Plots histogram of redshifts 
     """
@@ -281,7 +310,7 @@ def plot_redshifts(ned, bin_width=0.025):
     plt.xlabel('z')
     plt.ylabel('Number of SNe')
     plt.xlim((0,0.5))
-    plt.savefig(Path('figs/redshifts.png'), bbox_inches='tight', dpi=300)
+    plt.savefig(Path('figs/%s' % fname), bbox_inches='tight', dpi=300)
     plt.close()
 
 
@@ -301,6 +330,7 @@ def combine_sn_info(ned, sn_info):
     if 'z_indep_dist' in ned.columns:
         ned.drop(columns=['z_indep_dist'], inplace=True)
     # Inflate Hubble-derived distances by V_PEC
+    ned['h_dist_err'] = ned['h_dist_err'].astype(float)
     ned['h_dist_err'] = np.sqrt(ned['h_dist_err']**2 + (V_PEC / H0)**2).round(2)
 
     # Select NED entries that exist in sn_info

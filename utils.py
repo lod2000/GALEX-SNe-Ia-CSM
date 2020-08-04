@@ -11,12 +11,13 @@ from astropy.wcs import WCS
 from statsmodels.stats.weightstats import DescrStatsW
 
 # Default file and directory paths
-LC_DIR = Path('/mnt/d/GALEXdata_v10/LCs/')      # light curve data dir
-FITS_DIR = Path('/mnt/d/GALEXdata_v10/fits/')   # FITS data dir
-OSC_FILE = Path('ref/osc.csv')                  # Open Supernova Catalog file
-EXTERNAL_LC_DIR = Path('external/')             # light curves from Swift / others
-BG_FILE = Path('out/high_bg.csv')               # discarded data with high background
-EMPTY_LC_FILE = Path('out/empty_lc.csv')        # SNe with no useful lc data
+DATA_DIR = Path('/mnt/d/GALEXdata_v10')     # Path to data directory
+LC_DIR = DATA_DIR / Path('LCs/')            # light curve data dir
+FITS_DIR = DATA_DIR / Path('fits/')         # FITS data dir
+OSC_FILE = Path('ref/osc.csv')              # Open Supernova Catalog file
+EXTERNAL_LC_DIR = Path('external/')         # light curves from Swift / others
+BG_FILE = Path('out/high_bg.csv')           # discarded data with high background
+EMPTY_LC_FILE = Path('out/empty_lc.csv')    # SNe with no useful lc data
 
 # Variable cut parameters
 DETRAD_CUT = 0.55   # Detector radius above which to cut (deg)

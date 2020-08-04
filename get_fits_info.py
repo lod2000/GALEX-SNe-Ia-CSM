@@ -1,15 +1,10 @@
 #!/usr/bin/env python
 
-import numpy as np
-import pandas as pd
-
 from astropy.io import fits
-from astropy.time import Time
 from astropy import units as u
 from astropy.utils.exceptions import AstropyWarning
 
 from tqdm import tqdm
-from pathlib import Path
 import argparse
 import warnings
 
@@ -24,8 +19,8 @@ import matplotlib.ticker as tkr
 from utils import *
 
 FITS_INFO_FILE = Path('ref/fits_info.csv')
-SN_INFO_FILE = 'ref/sn_info.csv'
-STATS_FILE = 'out/quick_stats.txt'
+SN_INFO_FILE = Path('ref/sn_info.csv')
+STATS_FILE = Path('out/quick_stats.txt')
 
 
 def main():
@@ -44,13 +39,8 @@ def main():
 
     # Read Open Supernova Catalog
     osc = pd.read_csv(OSC_FILE, index_col='Name')
-    
-    # Option to overwrite or keep
-    # overwrite = True
-    # if FITS_INFO_FILE.is_file():
-    #     over_in = input('Previous FITS info file detected. Overwrite? [y/N] ')
-    #     overwrite = (over_in == 'y')
 
+    # Generate new FITS list
     if args.overwrite or not FITS_INFO_FILE.is_file():
         # Get all FITS file paths
         fits_files = get_fits_files(args.input, osc)
@@ -61,7 +51,7 @@ def main():
         fits_info = pd.read_csv(FITS_INFO_FILE)
 
     # Select only those with before+after observations
-    final_sample = get_final_sample(fits_info) 
+    final_sample = get_pre_post_obs(fits_info) 
     output_csv(final_sample, 'ref/sample_fits_info.csv')
 
     # Output compressed CSV without SN name duplicates
@@ -139,21 +129,31 @@ def compile_fits(fits_files, osc):
     return fits_info
 
 
-def get_final_sample(fits_info):
+def get_post_obs(fits_info):
     """
-    Strips out FITS files with only a single observation, or with only 
-    pre-discovery observations
-    Input:
-        fits_info (DataFrame): output from compile_fits
-    Output:
-        sample (DataFrame): stripped-down final sample
+    Returns DataFrame of SNe with multiple observations post-discovery, but none
+    pre-discovery.
+    """
+
+    post = fits_info['Epochs Post-SN']
+    pre = fits_info['Epochs Pre-SN']
+    multi_post = fits_info[(post > 1) & (pre == 0)].reset_index(drop=True)
+    multi_post = multi_post.sort_values(by=['Name', 'Band'])
+    multi_post.set_index('Name', drop=True, inplace=True)
+    return multi_post
+
+
+def get_pre_post_obs(fits_info):
+    """
+    Returns DataFrame of SNe with at least one observation before and after
+    discovery.
     """
 
     post = fits_info['Epochs Post-SN']
     pre = fits_info['Epochs Pre-SN']
     both = fits_info[(post > 0) & (pre > 0)].reset_index(drop=True)
-    sample = both.sort_values(by=['Name', 'Band']).set_index('Name', drop=True)
-    return sample
+    both = both.sort_values(by=['Name', 'Band']).set_index('Name', drop=True)
+    return both
 
 
 def compress_duplicates(fits_info):
@@ -187,7 +187,7 @@ def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
     Writes quick statistics about sample to text file
     Input:
         fits_info (DataFrame): output from compile_fits
-        final_sample (DataFrame): output from get_final_sample
+        final_sample (DataFrame): output from get_pre_post_obs
         sn_info (DataFrame): output from compress_duplicates
         osc (DataFrame): Open Supernova Catalog reference info
         file (Path or str): output file
@@ -195,8 +195,8 @@ def write_quick_stats(fits_info, final_sample, sn_info, osc, file):
 
     print('Writing quick stats...')
     sne = fits_info['Name'].drop_duplicates()
-    post_disc = fits_info[(fits_info['Epochs Post-SN'] > 0) & (fits_info['Epochs Pre-SN'] == 0)]
-    post_disc_sne = post_disc.drop_duplicates(['Name'])
+    post_disc = get_post_obs(fits_info)
+    post_disc_sne = post_disc.index.drop_duplicates()
     final_sne = final_sample.loc[~final_sample.index.duplicated()]
     fuv = final_sample[final_sample['Band'] == 'FUV']
     nuv = final_sample[final_sample['Band'] == 'NUV']
@@ -221,13 +221,13 @@ def plot_observations(fits_info, final_sample):
     print('\nPlotting histogram of observation frequency...')
     bands = ['FUV', 'NUV']
 
-    fig, axes = plt.subplots(2,1, sharex=True, sharey=True, gridspec_kw={'hspace': 0.05}, figsize=(8,6.5))
-    fig.set_tight_layout(True)
+    fig, axes = plt.subplots(2,1, sharex=True, sharey=True,
+            gridspec_kw={'hspace': 0.05}, figsize=(8,6.5))
 
     for ax, band in zip(axes, bands):
         df = fits_info[fits_info['Band'] == band]
         epochs = df['Total Epochs']
-        both = df[(df['Epochs Post-SN'] > 0) & (df['Epochs Pre-SN'] > 0)]['Total Epochs']
+        both = get_pre_post_obs(df)['Total Epochs']
 
         bins = np.logspace(0, np.log10(np.max(epochs)), 11)
         color = COLORS[band]
@@ -244,7 +244,8 @@ def plot_observations(fits_info, final_sample):
 
     # Outside axis labels only
     fig.add_subplot(111, frameon=False)
-    plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False, which='both')
+    plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, 
+            right=False, which='both')
     plt.xlabel('Total number of epochs', labelpad=12)
     plt.ylabel('Number of SNe', labelpad=18)
     plt.savefig(Path('figs/observations.png'), bbox_inches='tight', dpi=300)

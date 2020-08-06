@@ -245,7 +245,7 @@ def aggregate_detections(det_sne, sn_info):
         lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
         lc = add_uniform_columns(lc, [sn, band, bg, bg_err, sys_err], 
                 ['name', 'band', 'host', 'host_err', 'sys_err'])
-        lc['sigma'] = lc['flux_hostsub_hz'] / lc['flux_hostsub_err_hz']
+        # lc['sigma'] = lc['flux_hostsub_hz'] / lc['flux_hostsub_err_hz']
         detections.append(lc)
     detections = pd.concat(detections, ignore_index=True)
     output_csv(detections, Path('out/detections.csv'), index=False)

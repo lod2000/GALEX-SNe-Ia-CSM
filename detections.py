@@ -82,24 +82,23 @@ def detect_sn(sn, sn_info, args):
         # Host background & systematic error
         # Detect if 3 points above 3 sigma, or 1 point above 5 sigma
         threshold = 3
-        lc['sigma_above'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
         lc.insert(0, 'name', np.array([sn] * len(lc.index)))
         lc.insert(1, 'band', np.array([band] * len(lc.index)))
         after = lc[lc['t_delta'] > DT_MIN]
-        high_sigma = after[after['sigma_above'] >= 3]
+        high_sigma = after[after['sigma'] >= 3]
         high_sigma_idx = ','.join(high_sigma.index.astype(str))
-        entry = [sn, band, np.max(lc['sigma_above']), bg, bg_err, sys_err, high_sigma_idx]
+        entry = [sn, band, np.max(lc['sigma']), bg, bg_err, sys_err, high_sigma_idx]
         if len(high_sigma.index) >= 3:
             first_det_epoch = high_sigma['t_delta_rest'].iloc[0]
             entry += [first_det_epoch]
             detected_sne.append(entry)
             threshold = 3
-        elif len(lc[lc['sigma_above'] >= 5].index) >= 1:
-            first_det_epoch = lc[lc['sigma_above'] >= 5]['t_delta_rest'].iloc[0]
+        elif len(lc[lc['sigma'] >= 5].index) >= 1:
+            first_det_epoch = lc[lc['sigma'] >= 5]['t_delta_rest'].iloc[0]
             entry += [first_det_epoch]
             detected_sne.append(entry)
             threshold = 5
-        detections = lc[lc['sigma_above'] >= threshold].index
+        detections = lc[lc['sigma'] >= threshold].index
 
         if make_plot:
             # Plot data from this band

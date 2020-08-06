@@ -4,6 +4,9 @@ import numpy as np
 from pathlib import Path
 import platform
 
+from operator import or_
+from functools import reduce
+
 from astropy.time import Time
 from astropy.coordinates import Angle
 from astropy.io import fits
@@ -309,6 +312,8 @@ def full_import(sn, band, sn_info):
     # Subtract host background
     lc['flux_hostsub'] = lc['flux_bgsub'] - bg
     lc['flux_hostsub_err'] = np.sqrt(lc['flux_bgsub_err']**2 + bg_err**2)
+    # Detection confidence level
+    lc['sigma'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
 
     # Convert measured fluxes to absolute luminosities
     dist = sn_info.loc[sn, 'pref_dist']
@@ -632,10 +637,6 @@ class SN:
         self.name = name
         disc_date = osc.loc[name, 'Disc. Date']
         self.disc_date = Time(str(disc_date), format='iso', out_subfmt='date')
-        max_date = osc.loc[name, 'Max Date']
-        if pd.notna(max_date):
-            self.max_date = Time(str(max_date), format='iso', out_subfmt='date')
-        # self.mmax = osc.loc[name, 'mmax']
         self.host = osc.loc[name, 'Host Name']
         self.ra = Angle(osc.loc[name, 'R.A.'] + ' hours')
         self.dec = Angle(osc.loc[name, 'Dec.'] + ' deg')

@@ -344,8 +344,8 @@ def combine_sn_info(ned, sn_info):
     sn_info = sn_info.loc[:,~sn_info.columns.duplicated()]
     # Add CosmicFlows3 z-independent distances
     sn_info = add_cf3(sn_info)
-    # Remove entries w/o ned or cf3
-    sn_info = sn_info[pd.notna(sn_info['pref_dist'])]
+    # Remove entries w/o redshift info
+    sn_info = sn_info[pd.notna(sn_info['z'])]
     # Add hyperleda morphologies
     sn_info = add_hyperleda(sn_info)
 

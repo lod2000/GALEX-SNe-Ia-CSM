@@ -181,14 +181,15 @@ class Chev94Model:
 		self.fname = 'chev_model.dat'
 		self.times = np.array([1., 2., 5., 10., 17.5, 30.])*365.25
 		self.model_data = {}
-		for (name, wl, fl1, fl2, fl5, fl10, fl17, fl30) in [line.strip().split() for line in open(self.fname, 'r').readlines() if not line.startswith('#')]:
-			#print(name)
-			if name == 'Hbeta':
-				coeffs = np.array([float(fl)*1e36*scale for fl in [fl1, fl2, fl5, fl10, fl17, fl30]])
-				continue
-			linelum = np.array([float(fl) for fl in [fl1,fl2,fl5,fl10,fl17,fl30]])*coeffs
-			model = LineModel(float(wl), self.times, linelum)
-			self.model_data[name] = model
+		with open(self.fname, 'r') as f:
+			for (name, wl, fl1, fl2, fl5, fl10, fl17, fl30) in [line.strip().split() for line in f.readlines() if not line.startswith('#')]:
+				#print(name)
+				if name == 'Hbeta':
+					coeffs = np.array([float(fl)*1e36*scale for fl in [fl1, fl2, fl5, fl10, fl17, fl30]])
+					continue
+				linelum = np.array([float(fl) for fl in [fl1,fl2,fl5,fl10,fl17,fl30]])*coeffs
+				model = LineModel(float(wl), self.times, linelum)
+				self.model_data[name] = model
 
 	def gen_model(self, t):
 		wl = np.arange(W0, W1, DW)

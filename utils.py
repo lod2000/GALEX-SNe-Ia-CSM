@@ -632,6 +632,31 @@ def sn2fits(sn, band=None):
         return fits_name + '-FUV.fits.gz', fits_name + '-NUV.fits.gz'
 
 
+def fname2sn(fname):
+    """Extract SN name and band from a file name."""
+
+    fname = Path(fname)
+    split = fname.stem.split('-')
+    sn = '-'.join(split[:-1])
+    band = split[-1]
+    # Windows replaces : with _ in some file names
+    if 'CSS' in sn or 'MLS' in sn:
+        sn.replace('_', ':', 1)
+    sn.replace('_', ' ')
+    return sn, band
+
+
+def sn2fname(sn, band, suffix='.csv'):
+    # Converts SN name and GALEX band to a file name, e.g. for a light curve CSV
+
+    fname = '-'.join((sn, band)) + suffix
+    fname.replace(' ', '_')
+    # Make Windows-friendly
+    if (platform.system() == 'Windows') or ('Microsoft' in platform.release()):
+        fname = fname.replace(':', '_')
+    return Path(fname)
+
+
 class SN:
     def __init__(self, name, osc):
         self.name = name

@@ -3,18 +3,10 @@ import itertools
 from multiprocessing import Pool
 from functools import partial
 
-import warnings
-
 from utils import *
 from CSMmodel import CSMmodel
 
-DECAY_RATE = 0.3
-SCALE_FACTORS = [0.1, 0.5, 1, 2]
-WIDTH = 200 # plateau width (days)
-SIGMA = 3 # significance of data above which it counts as a detection
-DETECTIONS = [0, 0, 0]
-
-def main(iterations, tstart_max, dtstart, decay_rate, bins):
+def main(args, tstart=300, twidth=300, decay_rate=0.3, scale=1):
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
 
@@ -22,38 +14,33 @@ def main(iterations, tstart_max, dtstart, decay_rate, bins):
     params = []
     nondet = []
 
-    sne = sn_info.index.to_numpy()
-    start_times = np.arange(0, tstart_max, dtstart) # days post-discovery
-    widths = np.arange(100, 600, 100) # days
-    scales = np.array([1])
-
     # List of all possible combinations of SNe and model parameters
-    lists = [sne, start_times, widths, scales]
+    sne = sn_info.index.to_numpy()
+    lists = [sne, tstart, twidth, decay_rate, scale]
     comb = list(itertools.product(*lists))
 
-    # Sample SNe and parameters
-    sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
+    # Randomly sample SNe and parameters
+    sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(args.iter)]
 
     with Pool() as pool:
-        func = partial(count_recovered, sn_info=sn_info, bins=bins, decay_rate=decay_rate)
-        for sample, counts in tqdm(pool.imap(func, sample, chunksize=10), total=iterations):
-            params.append(sample)
+        func = partial(count_recovered, bins=args.bins, sn_info=sn_info, sigma=args.sigma)
+        for sample_params, counts in tqdm(pool.imap(func, sample, chunksize=10), total=args.iter):
+            params.append(sample_params)
             nondet.append(counts)
 
-    # for i in tqdm(range(iterations)):
-    #     sample, counts = count_recovered(comb, sn_info, bins, decay_rate)
-    #     params.append(sample)
-    #     nondet.append(counts)
-
     # Combine data
-    midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth', 'scale'))
-    df = pd.DataFrame(np.vstack(nondet), index=midx, columns=bins[:-1])
-    df.sort_values(by=['tstart', 'twidth'], axis=0, inplace=True)
+    midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth', 'decay_rate', 'scale'))
+    # print(midx.levels)
+    df = pd.DataFrame(np.vstack(nondet), index=midx, columns=args.bins[:-1])
+    df.sort_index(inplace=True)
+    # print(df)
+    # [df.reset_index(level=name, drop=True, inplace=True) for name in midx.names if len(midx.get_level_values(name)) == 1]
+    # print(df)
     sums = df.groupby(df.index).sum()
     print(sums)
 
 
-def count_recovered(sample_params, sn_info, bins, decay_rate):
+def count_recovered(sample_params, bins, sn_info, sigma):
     """Count recovered detections from injection-recovery for given model 
     parameters.
     """
@@ -62,7 +49,7 @@ def count_recovered(sample_params, sn_info, bins, decay_rate):
     nondet = np.full(len(bins)-1, 0)
 
     # Unpack sample parameters
-    sn, tstart, twidth, scale = sample_params
+    sn, tstart, twidth, decay_rate, scale = sample_params
 
     # Choose bands with light curve data
     bands = [b for b in ['FUV', 'NUV'] if (LC_DIR / sn2fname(sn, b, suffix='.csv')).is_file()]
@@ -70,7 +57,7 @@ def count_recovered(sample_params, sn_info, bins, decay_rate):
     for band in bands:
         # Get nondetection epochs from injection-recovery
         try:
-            t = inject_recover(sn, band, sn_info, tstart, twidth, decay_rate, scale)
+            t = inject_recover(sn, band, sn_info, sigma, tstart, twidth, decay_rate, scale)
         except (KeyError, pd.errors.EmptyDataError):
             # In case of empty light curve file
             continue
@@ -87,16 +74,16 @@ def count_recovered(sample_params, sn_info, bins, decay_rate):
         nondet += mask.astype(int)
 
     # Return parameters and nondetections
-    return (tstart, twidth, scale), nondet
+    return (tstart, twidth, decay_rate, scale), nondet
 
 
-def inject_recover(sn, band, sn_info, tstart, twidth, decay_rate, scale):
+def inject_recover(sn, band, sn_info, sigma, tstart, twidth, decay_rate, scale):
     """Perform injection and recovery for given SN and model parameters."""
 
     z = sn_info.loc[sn, 'z']
     lc, bg, bg_err, sys_err = full_import(sn, band, sn_info)
     lc = inject_model(lc, band, z, tstart, twidth, decay_rate, scale)
-    recovered = recover_model(lc)
+    recovered = recover_model(lc, sigma)
     return recovered['t_delta_rest']
 
 
@@ -119,14 +106,14 @@ def inject_model(lc, band, z, tstart, twidth, decay_rate, scale):
     return lc
 
 
-def recover_model(lc):
+def recover_model(lc, sigma=3):
     """
     Recover detections from CSM-injected data which otherwise wouldn't have
     been detected; recovered data must also be after discovery
     """
 
     lc['sigma_injected'] = lc['luminosity_injected'] / lc['luminosity_hostsub_err']
-    recovered = lc[(lc['sigma_injected'] > SIGMA) & (lc['sigma'] < SIGMA)]
+    recovered = lc[(lc['sigma_injected'] > sigma) & (lc['sigma'] < sigma)]
     recovered = recovered[recovered['t_delta_rest'] > 0]
     return recovered
 
@@ -134,15 +121,39 @@ def recover_model(lc):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--tmax', '-m', default=1000, type=int,
+    parser.add_argument('iter', type=int, help='Iterations')
+    # tstart parameters
+    parser.add_argument('--tmin', '-t0', default=0, type=int,
+            help='Minimum CSM model interaction start time, in days post-discovery')
+    parser.add_argument('--tmax', '-t1', default=1000, type=int,
             help='Maximum CSM model interaction start time, in days post-discovery')
-    parser.add_argument('--dtstart', '-t', default=100, type=int,
+    parser.add_argument('--tstep', '-dt', default=100, type=int,
             help='Start time interation step in days')
+    # twidth parameters
+    parser.add_argument('--wmin', '-w0', default=100, type=int,
+            help='Minimum CSM plateau width in days')
+    parser.add_argument('--wmax', '-w1', default=600, type=int,
+            help='Maximum CSM plateau width in days')
+    parser.add_argument('--wstep', '-dw', default=100, type=int,
+            help='Plateau width interation step in days')
+    # other parameters
     parser.add_argument('--bins', '-b', type=int, nargs='+', default=[0, 100, 500, 2500],
             help='Epoch bin times for statistics, including upper bound')
-    parser.add_argument('--iter', '-i', type=int, default=1000, help='Iterations')
-    parser.add_argument('--decay-rate', '-D', default=0.3, type=float, 
-            help='fractional decay rate per 100 days')
+    parser.add_argument('--decay', '-D', nargs='+', default=[0.3], type=float, 
+            help='Fractional decay rate per 100 days')
+    parser.add_argument('--scale', '-s', type=float, nargs='+', default=[1],
+            help='Multiplicative scale factor for CSM model')
+    parser.add_argument('--sigma', '-S', type=float, default=3, 
+            help='Detection significance level')
+    parser.add_argument('--detections', '-d', nargs='+', default=[0, 0, 0], type=int,
+            help='Number of detections in each bin; must pass one fewer argument than number of bins')
     args = parser.parse_args()
 
-    main(args.iter, args.tmax, args.dtstart, args.decay_rate, args.bins)
+    # Define parameter space
+    param_space = { 'tstart': np.arange(args.tmin, args.tmax, args.tstep),
+                    'twidth': np.arange(args.wmin, args.wmax, args.wstep),
+                    'decay_rate': args.decay,
+                    'scale': args.scale
+                    }
+
+    main(args, **param_space)

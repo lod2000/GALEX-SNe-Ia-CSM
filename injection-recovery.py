@@ -3,7 +3,6 @@ import itertools
 from multiprocessing import Pool
 from functools import partial
 import matplotlib.pyplot as plt
-
 from corner import corner
 
 from utils import *
@@ -17,9 +16,10 @@ SCALE = 1
 SIGMA = 3
 
 def main(iterations, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE, 
-        bins=BINS, det=DETECTIONS, sigma=SIGMA):
+        bins=BINS, det=DETECTIONS, sigma=SIGMA, overwrite=False):
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
+    output_file = Path('out/recovery.csv')
 
     # List of all possible combinations of SNe and model parameters
     sne = [Supernova(sn, sn_info) for sn in sn_info.index.to_list()]
@@ -30,9 +30,42 @@ def main(iterations, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE,
     # Randomly sample SNe and parameters
     sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
 
-    sums = sum_recovered(sample, decay_rate, scale, bins, sigma)
+    if output_file.is_file() or overwrite:
+        sums = pd.read_csv(output_file, index_col=['tstart', 'twidth'])
+    else:
+        sums = sum_recovered(sample, decay_rate, scale, bins, sigma)
+        sums.to_csv(Path('out/recovery.csv'))
 
-    sums.to_csv(Path('out/recovery.csv'))
+    plot_recovered(sums)
+
+
+def plot_recovered(sums):
+    """Plot a heatmap of recoveries in each epoch bin."""
+    
+    fig, axs = plt.subplots(1, len(sums.columns), sharey=True)
+
+    for ax, col in zip(axs, sums.columns):
+        arr = sums[col].unstack()
+        xlevels = sums.index.levels[1]
+        dx = xlevels[1] - xlevels[0]
+        ylevels = sums.index.levels[0]
+        dy = ylevels[1] - ylevels[0]
+        im = ax.imshow(arr, vmin=0, vmax=sums.max().max(), origin='lower',
+                extent=[xlevels[0], xlevels[-1]+dx, ylevels[0], ylevels[-1]+dy])
+        ax.set_title(col)
+
+    fig.add_subplot(111, frameon=False)
+    plt.tick_params(axis='both', labelcolor='none', which='both', top=False, 
+            bottom=False, left=False, right=False)
+    plt.xlabel(sums.index.names[1])
+    plt.ylabel(sums.index.names[0])
+
+    fig.subplots_adjust(right=0.8, wspace=0.05)
+    cax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    plt.colorbar(im, cax=cax, label='no. recovered', use_gridspec=True)
+
+    # plt.tight_layout()
+    plt.show()
 
 
 def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=SIGMA):
@@ -52,7 +85,8 @@ def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=S
 
     # Combine data
     midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth'))
-    df = pd.DataFrame(np.vstack(recovered), index=midx, columns=bins[:-1])
+    col_names = ['%s-%s' % (bins[i], bins[i+1]) for i in range(len(bins) - 1)]
+    df = pd.DataFrame(np.vstack(recovered), index=midx, columns=col_names)
     df.sort_index(inplace=True)
 
     # Sum data
@@ -208,6 +242,8 @@ if __name__ == '__main__':
             + 'fewer argument than number of bins')
     parser.add_argument('--sigma', '-S', type=float, default=SIGMA, 
             help='Detection significance level')
+    parser.add_argument('--overwrite', '-o', action='store_true',
+            help='Overwrite sums')
     args = parser.parse_args()
 
     # Define parameter space
@@ -216,6 +252,6 @@ if __name__ == '__main__':
 
     # Keyword arguments
     kwargs = {'decay_rate': args.decay, 'scale': args.scale, 'bins': args.bins, 
-            'det': args.detections, 'sigma': args.sigma}
+            'det': args.detections, 'sigma': args.sigma, 'overwrite': args.overwrite}
 
     main(args.iter, tstart, twidth, **kwargs)

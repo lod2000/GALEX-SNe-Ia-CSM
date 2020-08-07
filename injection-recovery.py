@@ -2,6 +2,9 @@ from tqdm import tqdm
 import itertools
 from multiprocessing import Pool
 from functools import partial
+import matplotlib.pyplot as plt
+
+from corner import corner
 
 from utils import *
 from CSMmodel import CSMmodel
@@ -18,13 +21,14 @@ def main(args, tstart=300, twidth=300, decay_rate=0.3, scale=1):
     sne = sn_info.index.to_numpy()
     lists = [sne, tstart, twidth, decay_rate, scale]
     comb = list(itertools.product(*lists))
+    iterations = min((args.iter, len(comb)))
 
     # Randomly sample SNe and parameters
-    sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(args.iter)]
+    sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
 
     with Pool() as pool:
         func = partial(count_recovered, bins=args.bins, sn_info=sn_info, sigma=args.sigma)
-        for sample_params, counts in tqdm(pool.imap(func, sample, chunksize=10), total=args.iter):
+        for sample_params, counts in tqdm(pool.imap(func, sample, chunksize=10), total=iterations):
             params.append(sample_params)
             nondet.append(counts)
 
@@ -116,6 +120,17 @@ def recover_model(lc, sigma=3):
     recovered = lc[(lc['sigma_injected'] > sigma) & (lc['sigma'] < sigma)]
     recovered = recovered[recovered['t_delta_rest'] > 0]
     return recovered
+
+
+def corner_plot(sums, bin):
+    """Display a corner plot of model parameter samples."""
+
+    params = np.vstack(sums.index.to_numpy())
+    counts = np.array([sums[bin].to_numpy()]).T
+    data = np.hstack((params[:,0:2], counts))
+    
+    fig = corner(data, labels=['tstart', 'twidth', 'counts'])
+    plt.show()
 
 
 if __name__ == '__main__':

@@ -56,8 +56,7 @@ def output_csv(df, file, **kwargs):
         **kwargs: passed on to DataFrame.to_csv()
     """
 
-    if type(file) == str:
-        file = Path(file) 
+    file = Path(file) 
     try:
         df.to_csv(file, **kwargs)
     except PermissionError:
@@ -341,6 +340,59 @@ def full_import(sn, band, sn_info):
             lc['mag_bgsub'], lc['mag_bgsub_err_1'], dist, dist_err)
     lc['absolute_mag_err_2'] = absolute_mag_err(
             lc['mag_bgsub'], lc['mag_bgsub_err_2'], dist, dist_err)[1]
+
+    return lc, bg, bg_err, sys_err
+
+
+def full_import_2(sn, band):
+    """
+    Imports the light curve for a specified supernova and band, adds luminosity
+    and days since discovery from SN info file, and incorporates background
+    and systematic errors. This version uses the Supernova class
+    """
+
+    lc = import_lc(sn.name, band)
+
+    # Convert dates to MJD
+    lc['t_mean_mjd'] = Time(lc['t_mean'], format='gps').mjd
+
+    # Add days relative to discovery date
+    lc['t_delta'] = lc['t_mean_mjd'] - sn.disc_date.mjd
+
+    # Correct epoch for stretch factor
+    lc['t_delta_rest'] = 1 / (1 + sn.z) * lc['t_delta']
+
+    # Get background & systematic error
+    bg, bg_err, sys_err = get_background(lc, band)
+    # Add systematic error
+    lc['flux_bgsub_err_total'] = np.sqrt(lc['flux_bgsub_err']**2 + sys_err**2)
+    # Subtract host background
+    lc['flux_hostsub'] = lc['flux_bgsub'] - bg
+    lc['flux_hostsub_err'] = np.sqrt(lc['flux_bgsub_err']**2 + bg_err**2)
+    # Detection confidence level
+    lc['sigma'] = lc['flux_hostsub'] / lc['flux_hostsub_err']
+
+    # Convert measured fluxes to absolute luminosities
+    lc['luminosity'], lc['luminosity_err'] = absolute_luminosity_err(
+            lc['flux_bgsub'], lc['flux_bgsub_err_total'], sn.dist, sn.dist_err, 
+            sn.z, sn.z_err, sn.a_v, band)
+    lc['luminosity_hostsub'], lc['luminosity_hostsub_err'] = absolute_luminosity_err(
+            lc['flux_hostsub'], lc['flux_hostsub_err'], sn.dist, sn.dist_err, 
+            sn.z, sn.z_err, sn.a_v, band)
+    
+    # Flux & luminosity density in terms of Hz
+    convert_cols = ['flux_bgsub', 'flux_bgsub_err', 'flux_bgsub_err_total',
+            'flux_hostsub', 'flux_hostsub_err', 'luminosity', 'luminosity_err',
+            'luminosity_hostsub', 'luminosity_hostsub_err']
+    for col in convert_cols:
+        hz_col = col+'_hz'
+        lc[hz_col] = wavelength2freq(lc[col], LAMBDA_EFF[band])
+
+    # Convert apparent to absolute magnitudes
+    lc['absolute_mag'], lc['absolute_mag_err_1'] = absolute_mag_err(
+            lc['mag_bgsub'], lc['mag_bgsub_err_1'], sn.dist, sn.dist_err)
+    lc['absolute_mag_err_2'] = absolute_mag_err(
+            lc['mag_bgsub'], lc['mag_bgsub_err_2'], sn.dist, sn.dist_err)[1]
 
     return lc, bg, bg_err, sys_err
 

@@ -21,10 +21,6 @@ def main(iterations, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE,
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
 
-    # Initialize arrays
-    params = []
-    nondet = []
-
     # List of all possible combinations of SNe and model parameters
     sne = [Supernova(sn, sn_info) for sn in sn_info.index.to_list()]
     lists = [sne, tstart, twidth]
@@ -34,25 +30,41 @@ def main(iterations, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE,
     # Randomly sample SNe and parameters
     sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
 
-    with Pool() as pool:
-        func = partial(count_recovered, bins=bins, sigma=sigma)
-        imap = pool.imap(func, sample, chunksize=10)
-        for sample_params, counts in tqdm(imap, total=iterations):
-            params.append(sample_params)
-            nondet.append(counts)
-
-    # Combine data
-    midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth'))
-    df = pd.DataFrame(np.vstack(nondet), index=midx, columns=bins[:-1])
-    df.sort_index(inplace=True)
-    sums = df.groupby(df.index).sum()
-    sums.set_index(pd.MultiIndex.from_tuples(sums.index, names=('tstart', 'twidth')), drop=True, inplace=True)
+    sums = sum_recovered(sample, decay_rate, scale, bins, sigma)
 
     sums.to_csv(Path('out/recovery.csv'))
 
 
+def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=SIGMA):
+    """Run injection-recovery on all parameters of given sample."""
+
+    # Initialize arrays
+    params = []
+    recovered = []
+
+    with Pool() as pool:
+        func = partial(count_recovered, decay_rate=decay_rate, scale=scale,
+                bins=bins, sigma=sigma)
+        imap = pool.imap(func, sample, chunksize=10)
+        for sample_params, counts in tqdm(imap, total=len(sample)):
+            params.append(sample_params)
+            recovered.append(counts)
+
+    # Combine data
+    midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth'))
+    df = pd.DataFrame(np.vstack(recovered), index=midx, columns=bins[:-1])
+    df.sort_index(inplace=True)
+
+    # Sum data
+    sums = df.groupby(df.index).sum()
+    sums_midx = pd.MultiIndex.from_tuples(sums.index, names=('tstart', 'twidth'))
+    sums.set_index(sums_midx, drop=True, inplace=True)
+
+    return sums
+
+
 def count_recovered(sample_params, decay_rate=DECAY_RATE, scale=SCALE, 
-        bins=BINS, det=DETECTIONS, sigma=SIGMA):
+        bins=BINS, sigma=SIGMA):
     """Count recovered detections from injection-recovery for given model 
     parameters.
     """

@@ -178,10 +178,10 @@ def main():
     print(bci)
     midpoint = np.mean(bci, axis=0)
     x_pos = np.arange(len(bins)-1)
-
     ax.errorbar(x_pos, midpoint, yerr=np.abs(bci - midpoint), capsize=10, 
             marker='o', linestyle='none', ms=10, mec='r', c='r', mfc='w',
             label='This study')
+
     # Confidence interval from Yao 2019
     ztf_bci = 100 * binom_conf_interval(1, 127, confidence_level=conf_level, interval='jeffreys')
     print(ztf_bci)
@@ -189,8 +189,15 @@ def main():
     ax.errorbar([0.1], [ztf_mean], yerr=([ztf_mean - ztf_bci[0]], [ztf_bci[1] - ztf_mean]),
             marker='o', c='b', linestyle='none', ms=10, capsize=10, mec='b', mfc='w',
             label='ZTF')
-    # ax.annotate('ZTF', (0.1, ztf_mean), textcoords='offset points', 
-    #         xytext=(10, 0), ha='left', va='center', size=18, color='b')
+
+    # ASAS-SN interval
+    asassn_bci = 100 * binom_conf_interval(3, 588, confidence_level=conf_level, interval='jeffreys')
+    print(asassn_bci)
+    asassn_mean = np.mean(asassn_bci)
+    ax.errorbar([0.2], [asassn_mean], yerr=([asassn_mean - asassn_bci[0]], [asassn_bci[1] - asassn_mean]),
+            marker='o', c='orange', linestyle='none', ms=10, capsize=10, mec='orange', mfc='w',
+            label='ASAS-SN')
+
     # Confidence interval & assumed late-onset rate from Graham 2019
     graham_rate = 6
     graham_bci = 100 * binom_conf_interval(1, 64, confidence_level=conf_level, interval='jeffreys')

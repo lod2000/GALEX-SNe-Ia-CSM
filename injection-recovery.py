@@ -65,7 +65,8 @@ def plot_recovered(sums):
     plt.colorbar(im, cax=cax, label='no. recovered', use_gridspec=True)
 
     # plt.tight_layout()
-    plt.show()
+    plt.savefig(Path('out/recovered.png'), dpi=300)
+    plt.close()
 
 
 def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=SIGMA):

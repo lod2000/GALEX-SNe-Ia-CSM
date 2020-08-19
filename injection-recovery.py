@@ -12,31 +12,35 @@ from CSMmodel import CSMmodel
 BINS = [0, 100, 500, 2500]
 DECAY_RATE = 0.3
 DETECTIONS = [0, 0, 0]
-SCALE = 1
+RECOV_MIN = 50 # minimum number of days after discovery to count as recovery
 SIGMA = 3
+WIDTH = 250 # days, from PTF11kx
+SCALE = 0
 
-def main(iterations, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE, 
-        bins=BINS, det=DETECTIONS, sigma=SIGMA, overwrite=False):
+# def main(iterations, tstart, scale, decay_rate=DECAY_RATE, scale=SCALE, 
+#         bins=BINS, det=DETECTIONS, sigma=SIGMA, overwrite=False):
+def main():
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
     output_file = Path('out/recovery.csv')
+    
 
-    # List of all possible combinations of SNe and model parameters
-    sne = [Supernova(sn, sn_info) for sn in sn_info.index.to_list()]
-    lists = [sne, tstart, twidth]
-    comb = list(itertools.product(*lists))
-    iterations = min((iterations, len(comb)))
+    # # List of all possible combinations of SNe and model parameters
+    # sne = [Supernova(sn, sn_info) for sn in sn_info.index.to_list()]
+    # lists = [sne, tstart, twidth]
+    # comb = list(itertools.product(*lists))
+    # iterations = min((iterations, len(comb)))
 
-    # Randomly sample SNe and parameters
-    sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
+    # # Randomly sample SNe and parameters
+    # sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
 
-    if output_file.is_file() or overwrite:
-        sums = pd.read_csv(output_file, index_col=['tstart', 'twidth'])
-    else:
-        sums = sum_recovered(sample, decay_rate, scale, bins, sigma)
-        sums.to_csv(Path('out/recovery.csv'))
+    # if output_file.is_file() or overwrite:
+    #     sums = pd.read_csv(output_file, index_col=['tstart', 'twidth'])
+    # else:
+    #     sums = sum_recovered(sample, decay_rate, scale, bins, sigma)
+    #     sums.to_csv(Path('out/recovery.csv'))
 
-    plot_recovered(sums)
+    # plot_recovered(sums)
 
 
 def plot_recovered(sums):
@@ -146,50 +150,67 @@ def inject_recover(sn, band, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE,
     return recovered['t_delta_rest']
 
 
-def inject_model(lc, band, z, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE):
+def inject_model(sn, lc, band, tstart, scale):
     """
     Inject CSM model into GALEX data and return the resulting light curve
     Inputs:
+        sn: Supernova object
         lc: light curve DataFrame
         band: GALEX filter
-        tstart: days after discovery that ejecta impacts CSM 
-        width: length of light curve plateau in days
+        tstart: days after discovery that ejecta impacts CSM
         scale: luminosity scale factor
     """
 
-    model = CSMmodel(tstart, twidth, decay_rate, scale=scale)
+    model = CSMmodel(tstart, WIDTH, DECAY_RATE, scale=scale)
     # Calculate luminosity at observation epochs
-    injection = model(lc['t_delta_rest'], z)[band]
+    injection = model(lc['t_delta_rest'], sn.z)[band]
     # Inject CSM curve
     lc['luminosity_injected'] = lc['luminosity_hostsub'] + injection
     return lc
 
 
-def recover_model(lc, sigma=SIGMA):
+def recover_model(lc):
     """
     Recover detections from CSM-injected data which otherwise wouldn't have
     been detected; recovered data must also be after discovery
     """
 
+    # Calculate significance of each point
     lc['sigma_injected'] = lc['luminosity_injected'] / lc['luminosity_hostsub_err']
-    recovered = lc[(lc['sigma_injected'] > sigma) & (lc['sigma'] < sigma)]
-    recovered = recovered[recovered['t_delta_rest'] > 0]
+    # Recover new detections
+    recovered = lc[(lc['sigma_injected'] >= SIGMA) & (lc['sigma'] < SIGMA)]
+    # Limit to points some time after discovery (default 50 days)
+    recovered = recovered[recovered['t_delta_rest'] >= RECOV_MIN]
     return recovered
 
 
-def corner_plot(sums, bin):
-    """Display a corner plot of model parameter samples."""
+# def corner_plot(sums, bin):
+#     """Display a corner plot of model parameter samples."""
 
-    params = np.vstack(sums.index.to_numpy())
-    counts = np.array([sums[bin].to_numpy()]).T
-    data = np.hstack((params[:,0:2], counts))
+#     params = np.vstack(sums.index.to_numpy())
+#     counts = np.array([sums[bin].to_numpy()]).T
+#     data = np.hstack((params[:,0:2], counts))
     
-    fig = corner(data, labels=['tstart', 'twidth', 'counts'])
-    plt.show()
+#     fig = corner(data, labels=['tstart', 'twidth', 'counts'])
+#     plt.show()
+
+
+class LightCurve:
+    def __init__(self, sn, band):
+        self.data, self.bg, self.bg_err, self.sys_err = full_import_2(sn, band)
+
+    def __call__(self):
+        return self.data
+
+    @classmethod
+    def from_fname(self, fname):
+        sn_name, self.band = fname2sn(fname)
+        sn = Supernova(sn_name)
+        return LightCurve(sn, self.band)
 
 
 class Supernova:
-    def __init__(self, name, sn_info=[], fname=Path('ref/sn_info.csv')):
+    def __init__(self, name, sn_info=[], fname='ref/sn_info.csv'):
         """Initialize Supernova by importing reference file."""
 
         if len(sn_info) == 0:
@@ -214,45 +235,51 @@ class Supernova:
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('iter', type=int, help='Iterations')
-    # tstart parameters
-    parser.add_argument('--tmin', '-t0', default=0, type=int,
-            help='Minimum CSM model interaction start time, in days post-discovery')
-    parser.add_argument('--tmax', '-t1', default=1000, type=int,
-            help='Maximum CSM model interaction start time, in days post-discovery')
-    parser.add_argument('--tstep', '-dt', default=100, type=int,
-            help='Start time interation step in days')
-    # twidth parameters
-    parser.add_argument('--wmin', '-w0', default=100, type=int,
-            help='Minimum CSM plateau width in days')
-    parser.add_argument('--wmax', '-w1', default=600, type=int,
-            help='Maximum CSM plateau width in days')
-    parser.add_argument('--wstep', '-dw', default=100, type=int,
-            help='Plateau width interation step in days')
-    # other parameters
-    parser.add_argument('--decay', '-D', default=DECAY_RATE, 
-            type=float, help='Fractional decay rate per 100 days')
-    parser.add_argument('--scale', '-s', type=float, default=SCALE,
-            help='Multiplicative scale factor for CSM model')
-    parser.add_argument('--bins', '-b', type=int, nargs='+', default=BINS,
-            help='Epoch bin times for statistics, including upper bound')
-    parser.add_argument('--detections', '-d', nargs='+', default=DETECTIONS, 
-            type=int, help='Number of detections in each bin; must pass one '\
-            + 'fewer argument than number of bins')
-    parser.add_argument('--sigma', '-S', type=float, default=SIGMA, 
-            help='Detection significance level')
-    parser.add_argument('--overwrite', '-o', action='store_true',
-            help='Overwrite sums')
-    args = parser.parse_args()
+    # import argparse
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('iter', type=int, help='Iterations')
+    # # tstart parameters
+    # parser.add_argument('--tmin', '-t0', default=0, type=int,
+    #         help='Minimum CSM model interaction start time, in days post-discovery')
+    # parser.add_argument('--tmax', '-t1', default=1000, type=int,
+    #         help='Maximum CSM model interaction start time, in days post-discovery')
+    # # parser.add_argument('--tstep', '-dt', default=100, type=int,
+    # #         help='Start time interation step in days')
+    # # twidth parameters
+    # parser.add_argument('--wmin', '-w0', default=100, type=int,
+    #         help='Minimum CSM plateau width in days')
+    # parser.add_argument('--wmax', '-w1', default=600, type=int,
+    #         help='Maximum CSM plateau width in days')
+    # parser.add_argument('--wstep', '-dw', default=100, type=int,
+    #         help='Plateau width interation step in days')
+    # # scale parameters
+    # parser.add_argument('--smin', '-w0', default=100, type=float,
+    #         help='Minimum CSM plateau width in days')
+    # parser.add_argument('--smax', '-w1', default=600, type=float,
+    #         help='Maximum CSM plateau width in days')
+    # # other parameters
+    # parser.add_argument('--decay', '-D', default=DECAY_RATE, 
+    #         type=float, help='Fractional decay rate per 100 days')
+    # # parser.add_argument('--scale', '-s', type=float, default=SCALE,
+    # #         help='Multiplicative scale factor for CSM model')
+    # parser.add_argument('--bins', '-b', type=int, nargs='+', default=BINS,
+    #         help='Epoch bin times for statistics, including upper bound')
+    # parser.add_argument('--detections', '-d', nargs='+', default=DETECTIONS, 
+    #         type=int, help='Number of detections in each bin; must pass one '\
+    #         + 'fewer argument than number of bins')
+    # parser.add_argument('--sigma', '-S', type=float, default=SIGMA, 
+    #         help='Detection significance level')
+    # parser.add_argument('--overwrite', '-o', action='store_true',
+    #         help='Overwrite sums')
+    # args = parser.parse_args()
 
-    # Define parameter space
-    tstart = np.arange(args.tmin, args.tmax, args.tstep)
-    twidth = np.arange(args.wmin, args.wmax, args.wstep)
+    # # Define parameter space
+    # tstart = np.arange(args.tmin, args.tmax, args.tstep)
+    # twidth = np.arange(args.wmin, args.wmax, args.wstep)
 
-    # Keyword arguments
-    kwargs = {'decay_rate': args.decay, 'scale': args.scale, 'bins': args.bins, 
-            'det': args.detections, 'sigma': args.sigma, 'overwrite': args.overwrite}
+    # # Keyword arguments
+    # kwargs = {'decay_rate': args.decay, 'scale': args.scale, 'bins': args.bins, 
+    #         'det': args.detections, 'sigma': args.sigma, 'overwrite': args.overwrite}
 
-    main(args.iter, tstart, twidth, **kwargs)
+    # main(args.iter, tstart, twidth, **kwargs)
+    main()

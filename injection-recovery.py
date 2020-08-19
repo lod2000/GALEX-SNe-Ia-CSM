@@ -24,9 +24,12 @@ def main():
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
     output_file = Path('out/recovery.csv')
 
-    sn = Supernova('SN2007on')
-    band = 'NUV'
-    run_ir(100, sn, band, 0, 1000, 0.5, 2)
+    supernovae = ['SN2007on', 'SN2010ai']
+    supernovae = sn_info.index.to_list()
+
+    recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
+    print(recovered_times[0])
+
     # recovered_times = inject_recover(sn, 'FUV', 0, 1)
     # print(recovered_times)
 
@@ -48,63 +51,67 @@ def main():
     # plot_recovered(sums)
 
 
-def plot_recovered(sums):
-    """Plot a heatmap of recoveries in each epoch bin."""
+def plot_recovery_rate():
+    pass
+
+
+# def plot_recovered(sums):
+#     """Plot a heatmap of recoveries in each epoch bin."""
     
-    fig, axs = plt.subplots(1, len(sums.columns), sharey=True)
+#     fig, axs = plt.subplots(1, len(sums.columns), sharey=True)
 
-    for ax, col in zip(axs, sums.columns):
-        arr = sums[col].unstack()
-        xlevels = sums.index.levels[1]
-        dx = xlevels[1] - xlevels[0]
-        ylevels = sums.index.levels[0]
-        dy = ylevels[1] - ylevels[0]
-        im = ax.imshow(arr, vmin=0, vmax=sums.max().max(), origin='lower',
-                extent=[xlevels[0], xlevels[-1]+dx, ylevels[0], ylevels[-1]+dy])
-        ax.set_title(col)
+#     for ax, col in zip(axs, sums.columns):
+#         arr = sums[col].unstack()
+#         xlevels = sums.index.levels[1]
+#         dx = xlevels[1] - xlevels[0]
+#         ylevels = sums.index.levels[0]
+#         dy = ylevels[1] - ylevels[0]
+#         im = ax.imshow(arr, vmin=0, vmax=sums.max().max(), origin='lower',
+#                 extent=[xlevels[0], xlevels[-1]+dx, ylevels[0], ylevels[-1]+dy])
+#         ax.set_title(col)
 
-    fig.add_subplot(111, frameon=False)
-    plt.tick_params(axis='both', labelcolor='none', which='both', top=False, 
-            bottom=False, left=False, right=False)
-    plt.xlabel(sums.index.names[1])
-    plt.ylabel(sums.index.names[0])
+#     fig.add_subplot(111, frameon=False)
+#     plt.tick_params(axis='both', labelcolor='none', which='both', top=False, 
+#             bottom=False, left=False, right=False)
+#     plt.xlabel(sums.index.names[1])
+#     plt.ylabel(sums.index.names[0])
 
-    fig.subplots_adjust(right=0.8, wspace=0.05)
-    cax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    plt.colorbar(im, cax=cax, label='no. recovered', use_gridspec=True)
+#     fig.subplots_adjust(right=0.8, wspace=0.05)
+#     cax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+#     plt.colorbar(im, cax=cax, label='no. recovered', use_gridspec=True)
 
-    # plt.tight_layout()
-    plt.savefig(Path('out/recovered.png'), dpi=300)
-    plt.close()
+#     # plt.tight_layout()
+#     plt.savefig(Path('out/recovered.png'), dpi=300)
+#     plt.close()
 
 
-def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=SIGMA):
-    """Run injection-recovery on all parameters of given sample."""
+# def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=SIGMA):
+#     """Run injection-recovery on all parameters of given sample."""
 
-    # Initialize arrays
-    params = []
-    recovered = []
+#     # Initialize arrays
+#     params = []
+#     recovered = []
 
-    with Pool() as pool:
-        func = partial(count_recovered, decay_rate=decay_rate, scale=scale,
-                bins=bins, sigma=sigma)
-        imap = pool.imap(func, sample, chunksize=10)
-        for sample_params, counts in tqdm(imap, total=len(sample)):
-            params.append(sample_params)
-            recovered.append(counts)
+#     with Pool() as pool:
+#         func = partial(count_recovered, decay_rate=decay_rate, scale=scale,
+#                 bins=bins, sigma=sigma)
+#         imap = pool.imap(func, sample, chunksize=10)
+#         for sample_params, counts in tqdm(imap, total=len(sample)):
+#             params.append(sample_params)
+#             recovered.append(counts)
 
-    # Combine data
-    midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth'))
-    col_names = ['%s-%s' % (bins[i], bins[i+1]) for i in range(len(bins) - 1)]
-    df = pd.DataFrame(np.vstack(recovered), index=midx, columns=col_names)
-    df.sort_index(inplace=True)
+#     # Combine data
+#     midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth'))
+#     col_names = ['%s-%s' % (bins[i], bins[i+1]) for i in range(len(bins) - 1)]
+#     df = pd.DataFrame(np.vstack(recovered), index=midx, columns=col_names)
+#     df.sort_index(inplace=True)
 
-    # Sum data
-    sums = df.groupby(df.index).sum()
-    sums_midx = pd.MultiIndex.from_tuples(sums.index, names=('tstart', 'twidth'))
-    sums.set_index(sums_midx, drop=True, inplace=True)
+#     # Sum data
+#     sums = df.groupby(df.index).sum()
+#     sums_midx = pd.MultiIndex.from_tuples(sums.index, names=('tstart', 'twidth'))
+#     sums.set_index(sums_midx, drop=True, inplace=True)
 
-    return sums
+#     return sums
 
 
 # def count_recovered(sample_params, decay_rate=DECAY_RATE, scale=SCALE, 
@@ -144,29 +151,62 @@ def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=S
 #     return (tstart, twidth), recovered
 
 
-def run_ir(iterations, sn, band, tstart_min, tstart_max, scale_min, scale_max):
+def get_recovery_rate(recovered_times):
+    pass
+
+
+def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max):
+
+    # List of supernovae and bands to perform injection-recovery
+    supernovae = sorted(list(supernovae) * 2)
+    bands = ['FUV', 'NUV'] * len(supernovae)
+    recovered_times = []
+
+    # Iterate over supernovae, bands
+    for i, (sn_name, band) in enumerate(zip(supernovae, bands)):
+        # Ignore if light curve file doesn't exist
+        lc_file = LC_DIR / sn2fname(sn_name, band)
+        if not lc_file.is_file():
+            continue
+
+        print('\n%s - %s [%s/%s]' % (sn_name, band, i+1, len(supernovae)))
+        sn = Supernova(sn_name)
+        sample_times = sample_params(iterations, sn, band, tstart_min, 
+                tstart_max, scale_min, scale_max)
+        recovered_times += sample_times
+
+    return recovered_times
+
+
+def sample_params(iterations, sn, band, tstart_min, tstart_max, scale_min, scale_max):
     """Run injection recovery on a single SN for a given number of iterations."""
 
+    # Randomly sample start times (ints) and scale factors (floats)
     tstarts = np.random.randint(tstart_min, tstart_max, size=iterations)
     scales = (scale_max - scale_min) * np.random.rand(iterations) + scale_min
     params = np.array(list(zip(tstarts, scales)))
 
+    # Import light curve for SN
     lc = LightCurve(sn, band)
-    recovered_times = []
+    sample_times = []
 
+    # Run injection-recovery in parallel for each sampled CSM parameter
     with Pool() as pool:
         func = partial(inject_recover, sn=sn, lc=lc)
         imap = pool.imap(func, params, chunksize=10)
         for times in tqdm(imap, total=params.shape[0]):
-            recovered_times.append(times)
+            sample_times.append(times)
 
-    recovered_times = [
-            {   'tstart':params[i,0], 
-                'scale':params[i,1], 
-                'times':recovered_times[i]} 
+    # List of recovered times and associated parameters
+    sample_times = [
+            {   'sn': sn.name,
+                'band': band,
+                'tstart': params[i,0], 
+                'scale': params[i,1], 
+                'times': sample_times[i]} 
             for i in range(iterations)]
 
-    return recovered_times
+    return sample_times
 
 
 def inject_recover(params, sn, lc):

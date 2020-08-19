@@ -23,7 +23,12 @@ def main():
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
     output_file = Path('out/recovery.csv')
-    
+
+    sn = Supernova('SN2007on')
+    band = 'NUV'
+    run_ir(100, sn, band, 0, 1000, 0.5, 2)
+    # recovered_times = inject_recover(sn, 'FUV', 0, 1)
+    # print(recovered_times)
 
     # # List of all possible combinations of SNe and model parameters
     # sne = [Supernova(sn, sn_info) for sn in sn_info.index.to_list()]
@@ -102,83 +107,110 @@ def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=S
     return sums
 
 
-def count_recovered(sample_params, decay_rate=DECAY_RATE, scale=SCALE, 
-        bins=BINS, sigma=SIGMA):
-    """Count recovered detections from injection-recovery for given model 
-    parameters.
-    """
+# def count_recovered(sample_params, decay_rate=DECAY_RATE, scale=SCALE, 
+#         bins=BINS, sigma=SIGMA):
+#     """Count recovered detections from injection-recovery for given model 
+#     parameters.
+#     """
 
-    # Initialize recovery counts
-    recovered = np.full(len(bins)-1, 0)
+#     # Initialize recovery counts
+#     recovered = np.full(len(bins)-1, 0)
 
-    # Unpack sample parameters
-    sn, tstart, twidth = sample_params
+#     # Unpack sample parameters
+#     sn, tstart, twidth = sample_params
 
-    # Choose bands with light curve data
-    bands = [b for b in ['FUV', 'NUV'] if (LC_DIR / sn2fname(sn.name, b, suffix='.csv')).is_file()]
+#     # Choose bands with light curve data
+#     bands = [b for b in ['FUV', 'NUV'] if (LC_DIR / sn2fname(sn.name, b, suffix='.csv')).is_file()]
 
-    for band in bands:
-        # Get nondetection epochs from injection-recovery
-        try:
-            t = inject_recover(sn, band, tstart, twidth, decay_rate=decay_rate, 
-                    scale=scale, sigma=sigma)
-        except (KeyError, pd.errors.EmptyDataError):
-            # In case of empty light curve file
-            continue
+#     for band in bands:
+#         # Get nondetection epochs from injection-recovery
+#         try:
+#             t = inject_recover(sn, band, tstart, twidth, decay_rate=decay_rate, 
+#                     scale=scale, sigma=sigma)
+#         except (KeyError, pd.errors.EmptyDataError):
+#             # In case of empty light curve file
+#             continue
 
-        # Split recovered epochs by bin and record recovered detections per bin
-        n_det = np.array(
-                [len(t[(t > bins[i]) & (t < bins[i+1])]) for i in range(len(bins)-1)]
-        )
+#         # Split recovered epochs by bin and record recovered detections per bin
+#         n_det = np.array(
+#                 [len(t[(t > bins[i]) & (t < bins[i+1])]) for i in range(len(bins)-1)]
+#         )
 
-        # Convert counts to true/false per bin
-        mask = n_det > 0
-        recovered += mask.astype(int)
+#         # Convert counts to true/false per bin
+#         mask = n_det > 0
+#         recovered += mask.astype(int)
 
-    # Return parameters and nondetections
-    return (tstart, twidth), recovered
+#     # Return parameters and nondetections
+#     return (tstart, twidth), recovered
 
 
-def inject_recover(sn, band, tstart, twidth, decay_rate=DECAY_RATE, scale=SCALE, 
-        sigma=SIGMA):
+def run_ir(iterations, sn, band, tstart_min, tstart_max, scale_min, scale_max):
+    """Run injection recovery on a single SN for a given number of iterations."""
+
+    tstarts = np.random.randint(tstart_min, tstart_max, size=iterations)
+    scales = (scale_max - scale_min) * np.random.rand(iterations) + scale_min
+    params = np.array(list(zip(tstarts, scales)))
+
+    lc = LightCurve(sn, band)
+    recovered_times = []
+
+    with Pool() as pool:
+        func = partial(inject_recover, sn=sn, lc=lc)
+        imap = pool.imap(func, params, chunksize=10)
+        for times in tqdm(imap, total=params.shape[0]):
+            recovered_times.append(times)
+
+    recovered_times = [
+            {   'tstart':params[i,0], 
+                'scale':params[i,1], 
+                'times':recovered_times[i]} 
+            for i in range(iterations)]
+
+    return recovered_times
+
+
+def inject_recover(params, sn, lc):
     """Perform injection and recovery for given SN and model parameters."""
 
-    lc, bg, bg_err, sys_err = full_import_2(sn, band)
-    lc = inject_model(lc, band, sn.z, tstart, twidth, decay_rate=decay_rate, 
-            scale=scale)
-    recovered = recover_model(lc, sigma=sigma)
-    return recovered['t_delta_rest']
+    tstart, scale = params
+    injected = inject_model(sn, lc, tstart, scale)
+    recovered = recover_model(injected)
+    # Return days post-discoverey with recovered detections
+    return recovered['t_delta_rest'].to_list()
 
 
-def inject_model(sn, lc, band, tstart, scale):
+def inject_model(sn, lc, tstart, scale):
     """
-    Inject CSM model into GALEX data and return the resulting light curve
+    Inject CSM model into GALEX data and return the resulting light curve.
     Inputs:
         sn: Supernova object
-        lc: light curve DataFrame
+        lc: LightCurve object
         band: GALEX filter
         tstart: days after discovery that ejecta impacts CSM
         scale: luminosity scale factor
+    Output:
+        lc: LightCurve object with injected light curve
     """
 
+    data = lc.data.copy()
     model = CSMmodel(tstart, WIDTH, DECAY_RATE, scale=scale)
     # Calculate luminosity at observation epochs
-    injection = model(lc['t_delta_rest'], sn.z)[band]
+    injection = model(data['t_delta_rest'], sn.z)[lc.band]
     # Inject CSM curve
-    lc['luminosity_injected'] = lc['luminosity_hostsub'] + injection
-    return lc
+    data['luminosity_injected'] = data['luminosity_hostsub'] + injection
+    return data
 
 
-def recover_model(lc):
+def recover_model(data):
     """
     Recover detections from CSM-injected data which otherwise wouldn't have
-    been detected; recovered data must also be after discovery
+    been detected.
     """
 
     # Calculate significance of each point
-    lc['sigma_injected'] = lc['luminosity_injected'] / lc['luminosity_hostsub_err']
+    data['sigma_injected'] = data['luminosity_injected'] / data['luminosity_hostsub_err']
     # Recover new detections
-    recovered = lc[(lc['sigma_injected'] >= SIGMA) & (lc['sigma'] < SIGMA)]
+    recovered = data[(data['sigma_injected'] >= SIGMA) & (data['sigma'] < SIGMA)]
     # Limit to points some time after discovery (default 50 days)
     recovered = recovered[recovered['t_delta_rest'] >= RECOV_MIN]
     return recovered
@@ -197,6 +229,7 @@ def recover_model(lc):
 
 class LightCurve:
     def __init__(self, sn, band):
+        self.band = band
         self.data, self.bg, self.bg_err, self.sys_err = full_import_2(sn, band)
 
     def __call__(self):

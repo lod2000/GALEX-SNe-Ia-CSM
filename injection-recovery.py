@@ -25,7 +25,7 @@ def main():
     output_file = Path('out/recovery.csv')
 
     supernovae = ['SN2007on', 'SN2010ai']
-    supernovae = sn_info.index.to_list()
+    # supernovae = sn_info.index.to_list()
 
     recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
     print(recovered_times[0])
@@ -152,10 +152,12 @@ def plot_recovery_rate():
 
 
 def get_recovery_rate(recovered_times):
+    """Bin results and calculate the recovery rate."""
     pass
 
 
 def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max):
+    """Run injection recovery with random parameters for a list of supernovae."""
 
     # List of supernovae and bands to perform injection-recovery
     supernovae = sorted(list(supernovae) * 2)
@@ -171,8 +173,10 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
 
         print('\n%s - %s [%s/%s]' % (sn_name, band, i+1, len(supernovae)))
         sn = Supernova(sn_name)
+        # Run injection-recovery on many randomly sampled parameters
         sample_times = sample_params(iterations, sn, band, tstart_min, 
                 tstart_max, scale_min, scale_max)
+        # Append resulting recovered times
         recovered_times += sample_times
 
     return recovered_times
@@ -188,6 +192,7 @@ def sample_params(iterations, sn, band, tstart_min, tstart_max, scale_min, scale
 
     # Import light curve for SN
     lc = LightCurve(sn, band)
+    all_times = lc.data[lc.data['t_delta_rest'] >= RECOV_MIN]['t_delta_rest'].to_list()
     sample_times = []
 
     # Run injection-recovery in parallel for each sampled CSM parameter
@@ -203,7 +208,8 @@ def sample_params(iterations, sn, band, tstart_min, tstart_max, scale_min, scale
                 'band': band,
                 'tstart': params[i,0], 
                 'scale': params[i,1], 
-                'times': sample_times[i]} 
+                'recovered': sample_times[i],
+                'all': all_times} 
             for i in range(iterations)]
 
     return sample_times

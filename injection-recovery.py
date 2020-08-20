@@ -3,6 +3,7 @@ import itertools
 from multiprocessing import Pool
 from functools import partial
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 from corner import corner
 
 from utils import *
@@ -28,9 +29,9 @@ def main():
     # supernovae = sn_info.index.to_list()
 
     recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
-    print(recovered_times[0])
     rate_hist = get_recovery_rate(recovered_times, 50, 0.1)
-    print(rate_hist)
+    # print(rate_hist)
+    plot_recovery_rate(rate_hist)
 
     # recovered_times = inject_recover(sn, 'FUV', 0, 1)
     # print(recovered_times)
@@ -51,10 +52,6 @@ def main():
     #     sums.to_csv(Path('out/recovery.csv'))
 
     # plot_recovered(sums)
-
-
-def plot_recovery_rate():
-    pass
 
 
 # def plot_recovered(sums):
@@ -153,6 +150,28 @@ def plot_recovery_rate():
 #     return (tstart, twidth), recovered
 
 
+def plot_recovery_rate(rate_hist):
+    """Plot 2D histogram of recovery rate by time since discovery and scale factor."""
+
+    # Flip y-axis
+    rate_hist.sort_index(ascending=True, inplace=True)
+    # Calculate data range
+    bin_width = rate_hist.columns[1] - rate_hist.columns[0]
+    bin_height = rate_hist.index[1] - rate_hist.index[0]
+    extent = (rate_hist.columns[0], rate_hist.columns[-1]+bin_width, 
+            rate_hist.index[0], rate_hist.index[-1]+bin_height)
+    # Plot
+    fig, ax = plt.subplots()
+    im = ax.imshow(rate_hist, aspect='auto', origin='lower', extent=extent)
+    ax.xaxis.set_minor_locator(MultipleLocator(bin_width))
+    ax.yaxis.set_minor_locator(MultipleLocator(bin_height))
+    ax.set_xlabel('Time since discovery [days]')
+    ax.set_ylabel('Scale factor')
+    plt.colorbar(im)
+    fig.tight_layout()
+    plt.show()
+
+
 def get_recovery_rate(recovered_times, bin_width, bin_height):
     """Generate 2D histogram of recovery rate by time and scale factor
     Inputs:
@@ -160,7 +179,7 @@ def get_recovery_rate(recovered_times, bin_width, bin_height):
         bin_width: bin width in heatmap plot, in days
         bin_height: bin height in heatmap plot, in scale factor fraction
     Output:
-        rate_hist: 2D histogram of recovery rates
+        rate_hist: 2D histogram of recovery rates, DataFrame
     """
     
     print('\nBinning recovery rates...')
@@ -180,7 +199,10 @@ def get_recovery_rate(recovered_times, bin_width, bin_height):
     rec_hist = np.histogram2d(recovered[:,0], recovered[:,1], [x_edges, y_edges])[0]
     total_hist = np.histogram2d(total[:,0], total[:,1], [x_edges, y_edges])[0]
     rate_hist = rec_hist / total_hist
-    print(rate_hist.shape)
+    # Transpose and convert to DataFrame with time increasing along the rows
+    # and scale height increasing down the columns. Column and index labels
+    # are the lower bound of each bin
+    rate_hist = pd.DataFrame(rate_hist.T, index=y_edges[:-1], columns=x_edges[:-1])
 
     return rate_hist
 

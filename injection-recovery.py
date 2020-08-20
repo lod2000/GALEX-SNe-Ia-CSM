@@ -29,6 +29,8 @@ def main():
 
     recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
     print(recovered_times[0])
+    rate_hist = get_recovery_rate(recovered_times, 50, 0.1)
+    print(rate_hist)
 
     # recovered_times = inject_recover(sn, 'FUV', 0, 1)
     # print(recovered_times)
@@ -151,13 +153,50 @@ def plot_recovery_rate():
 #     return (tstart, twidth), recovered
 
 
-def get_recovery_rate(recovered_times):
-    """Bin results and calculate the recovery rate."""
-    pass
+def get_recovery_rate(recovered_times, bin_width, bin_height):
+    """Generate 2D histogram of recovery rate by time and scale factor
+    Inputs:
+        recovered_times: list of dicts
+        bin_width: bin width in heatmap plot, in days
+        bin_height: bin height in heatmap plot, in scale factor fraction
+    Output:
+        rate_hist: 2D histogram of recovery rates
+    """
+    
+    print('\nBinning recovery rates...')
+    # Make lists of recovered points and all points
+    recovered = []
+    total = []
+    for rec_dict in tqdm(recovered_times):
+        recovered += [[time, rec_dict['scale']] for time in rec_dict['recovered']]
+        total += [[time, rec_dict['scale']] for time in rec_dict['all']]
+
+    recovered = np.array(recovered)
+    total = np.array(total)
+
+    # 2D histogram
+    x_edges = np.arange(RECOV_MIN, np.max(total[:,0]), bin_width)
+    y_edges = np.arange(np.min(total[:,1]), np.max(total[:,1]), bin_height)
+    rec_hist = np.histogram2d(recovered[:,0], recovered[:,1], [x_edges, y_edges])[0]
+    total_hist = np.histogram2d(total[:,0], total[:,1], [x_edges, y_edges])[0]
+    rate_hist = rec_hist / total_hist
+    print(rate_hist.shape)
+
+    return rate_hist
 
 
 def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max):
-    """Run injection recovery with random parameters for a list of supernovae."""
+    """Run injection recovery with random parameters for a list of supernovae.
+    Inputs:
+        iterations: number of times to sample parameter space
+        supernovae: list of SN names
+        tstart_min: minimum CSM model start time
+        tstart_max: maximum CSM model start time
+        scale_min: minimum CSM model scale factor
+        scale_max: maximum CSM model scale factor
+    Outputs:
+        recovered_times: list of dicts
+    """
 
     # List of supernovae and bands to perform injection-recovery
     supernovae = sorted(list(supernovae) * 2)
@@ -183,7 +222,18 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
 
 
 def sample_params(iterations, sn, band, tstart_min, tstart_max, scale_min, scale_max):
-    """Run injection recovery on a single SN for a given number of iterations."""
+    """Run injection recovery on a single SN for a given number of iterations.
+    Inputs:
+        iterations: int
+        sn: Supernova object
+        band: 'FUV' or 'NUV'
+        tstart_min: minimum CSM model start time
+        tstart_max: maximum CSM model start time
+        scale_min: minimum CSM model scale factor
+        scale_max: maximum CSM model scale factor
+    Outputs:
+        sample_times: list of dicts
+    """
 
     # Randomly sample start times (ints) and scale factors (floats)
     tstarts = np.random.randint(tstart_min, tstart_max, size=iterations)
@@ -216,7 +266,14 @@ def sample_params(iterations, sn, band, tstart_min, tstart_max, scale_min, scale
 
 
 def inject_recover(params, sn, lc):
-    """Perform injection and recovery for given SN and model parameters."""
+    """Perform injection and recovery for given SN and model parameters.
+    Inputs:
+        params: [tstart, scale]
+        sn: Supernova object
+        lc: LightCurve object
+    Output:
+        list of times of recovered data
+    """
 
     tstart, scale = params
     injected = inject_model(sn, lc, tstart, scale)
@@ -231,7 +288,6 @@ def inject_model(sn, lc, tstart, scale):
     Inputs:
         sn: Supernova object
         lc: LightCurve object
-        band: GALEX filter
         tstart: days after discovery that ejecta impacts CSM
         scale: luminosity scale factor
     Output:

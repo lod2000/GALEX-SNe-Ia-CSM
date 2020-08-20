@@ -702,7 +702,7 @@ def sn2fname(sn, band, suffix='.csv'):
     # Converts SN name and GALEX band to a file name, e.g. for a light curve CSV
 
     fname = '-'.join((sn, band)) + suffix
-    fname.replace(' ', '_')
+    fname = fname.replace(' ', '_')
     # Make Windows-friendly
     if (platform.system() == 'Windows') or ('Microsoft' in platform.release()):
         fname = fname.replace(':', '_')

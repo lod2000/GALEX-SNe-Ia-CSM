@@ -12,11 +12,9 @@ from CSMmodel import CSMmodel
 # Default values
 BINS = [0, 100, 500, 2500]
 DECAY_RATE = 0.3
-DETECTIONS = [0, 0, 0]
 RECOV_MIN = 50 # minimum number of days after discovery to count as recovery
 SIGMA = 3
 WIDTH = 250 # days, from PTF11kx
-SCALE = 0
 RECOV_HIST_FILE = Path('out/recovery_rate.csv')
 
 # def main(iterations, tstart, scale, decay_rate=DECAY_RATE, scale=SCALE, 
@@ -26,12 +24,15 @@ def main(overwrite=False):
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
     output_file = Path('out/recovery.csv')
 
-    supernovae = ['SN2007on', 'SN2010ai']
+    supernovae = ['SN2007on', 'SN2010ai', 'SDSS-II SN 779', 'Hawk', 'HST04Sas']
     # supernovae = sn_info.index.to_list()
 
     if overwrite or not RECOV_HIST_FILE.is_file():
-        recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
-        rate_hist = get_recovery_rate(recovered_times, 50, 0.1)
+        x_max = 1000
+        y_min = 0.5
+        y_max = 2
+        recovered_times = run_ir(100, supernovae, 0, x_max, y_min, y_max)
+        rate_hist = get_recovery_rate(recovered_times, 50, x_max, 0.1, y_min, y_max)
         output_csv(rate_hist, RECOV_HIST_FILE)
     else:
         rate_hist = pd.read_csv(RECOV_HIST_FILE, index_col=0)
@@ -39,134 +40,20 @@ def main(overwrite=False):
     print(rate_hist)
     plot_recovery_rate(rate_hist)
 
-    # recovered_times = inject_recover(sn, 'FUV', 0, 1)
-    # print(recovered_times)
-
-    # # List of all possible combinations of SNe and model parameters
-    # sne = [Supernova(sn, sn_info) for sn in sn_info.index.to_list()]
-    # lists = [sne, tstart, twidth]
-    # comb = list(itertools.product(*lists))
-    # iterations = min((iterations, len(comb)))
-
-    # # Randomly sample SNe and parameters
-    # sample = [comb.pop(np.random.randint(0, len(comb))) for i in range(iterations)]
-
-    # if output_file.is_file() or overwrite:
-    #     sums = pd.read_csv(output_file, index_col=['tstart', 'twidth'])
-    # else:
-    #     sums = sum_recovered(sample, decay_rate, scale, bins, sigma)
-    #     sums.to_csv(Path('out/recovery.csv'))
-
-    # plot_recovered(sums)
-
-
-# def plot_recovered(sums):
-#     """Plot a heatmap of recoveries in each epoch bin."""
-    
-#     fig, axs = plt.subplots(1, len(sums.columns), sharey=True)
-
-#     for ax, col in zip(axs, sums.columns):
-#         arr = sums[col].unstack()
-#         xlevels = sums.index.levels[1]
-#         dx = xlevels[1] - xlevels[0]
-#         ylevels = sums.index.levels[0]
-#         dy = ylevels[1] - ylevels[0]
-#         im = ax.imshow(arr, vmin=0, vmax=sums.max().max(), origin='lower',
-#                 extent=[xlevels[0], xlevels[-1]+dx, ylevels[0], ylevels[-1]+dy])
-#         ax.set_title(col)
-
-#     fig.add_subplot(111, frameon=False)
-#     plt.tick_params(axis='both', labelcolor='none', which='both', top=False, 
-#             bottom=False, left=False, right=False)
-#     plt.xlabel(sums.index.names[1])
-#     plt.ylabel(sums.index.names[0])
-
-#     fig.subplots_adjust(right=0.8, wspace=0.05)
-#     cax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-#     plt.colorbar(im, cax=cax, label='no. recovered', use_gridspec=True)
-
-#     # plt.tight_layout()
-#     plt.savefig(Path('out/recovered.png'), dpi=300)
-#     plt.close()
-
-
-# def sum_recovered(sample, decay_rate=DECAY_RATE, scale=SCALE, bins=BINS, sigma=SIGMA):
-#     """Run injection-recovery on all parameters of given sample."""
-
-#     # Initialize arrays
-#     params = []
-#     recovered = []
-
-#     with Pool() as pool:
-#         func = partial(count_recovered, decay_rate=decay_rate, scale=scale,
-#                 bins=bins, sigma=sigma)
-#         imap = pool.imap(func, sample, chunksize=10)
-#         for sample_params, counts in tqdm(imap, total=len(sample)):
-#             params.append(sample_params)
-#             recovered.append(counts)
-
-#     # Combine data
-#     midx = pd.MultiIndex.from_tuples(params, names=('tstart', 'twidth'))
-#     col_names = ['%s-%s' % (bins[i], bins[i+1]) for i in range(len(bins) - 1)]
-#     df = pd.DataFrame(np.vstack(recovered), index=midx, columns=col_names)
-#     df.sort_index(inplace=True)
-
-#     # Sum data
-#     sums = df.groupby(df.index).sum()
-#     sums_midx = pd.MultiIndex.from_tuples(sums.index, names=('tstart', 'twidth'))
-#     sums.set_index(sums_midx, drop=True, inplace=True)
-
-#     return sums
-
-
-# def count_recovered(sample_params, decay_rate=DECAY_RATE, scale=SCALE, 
-#         bins=BINS, sigma=SIGMA):
-#     """Count recovered detections from injection-recovery for given model 
-#     parameters.
-#     """
-
-#     # Initialize recovery counts
-#     recovered = np.full(len(bins)-1, 0)
-
-#     # Unpack sample parameters
-#     sn, tstart, twidth = sample_params
-
-#     # Choose bands with light curve data
-#     bands = [b for b in ['FUV', 'NUV'] if (LC_DIR / sn2fname(sn.name, b, suffix='.csv')).is_file()]
-
-#     for band in bands:
-#         # Get nondetection epochs from injection-recovery
-#         try:
-#             t = inject_recover(sn, band, tstart, twidth, decay_rate=decay_rate, 
-#                     scale=scale, sigma=sigma)
-#         except (KeyError, pd.errors.EmptyDataError):
-#             # In case of empty light curve file
-#             continue
-
-#         # Split recovered epochs by bin and record recovered detections per bin
-#         n_det = np.array(
-#                 [len(t[(t > bins[i]) & (t < bins[i+1])]) for i in range(len(bins)-1)]
-#         )
-
-#         # Convert counts to true/false per bin
-#         mask = n_det > 0
-#         recovered += mask.astype(int)
-
-#     # Return parameters and nondetections
-#     return (tstart, twidth), recovered
-
 
 def plot_recovery_rate(rate_hist):
     """Plot 2D histogram of recovery rate by time since discovery and scale factor."""
 
     # Flip y-axis
     rate_hist.sort_index(ascending=True, inplace=True)
+
     # Calculate data range
     x_bins = rate_hist.columns.to_numpy(dtype=float)
     y_bins = rate_hist.index.to_numpy(dtype=float)
     bin_width = x_bins[1] - x_bins[0]
     bin_height = y_bins[1] - y_bins[0]
     extent = (x_bins[0], x_bins[-1]+bin_width, y_bins[0], y_bins[-1]+bin_height)
+
     # Plot
     fig, ax = plt.subplots()
     im = ax.imshow(rate_hist, aspect='auto', origin='lower', extent=extent)
@@ -179,7 +66,7 @@ def plot_recovery_rate(rate_hist):
     plt.show()
 
 
-def get_recovery_rate(recovered_times, bin_width, bin_height):
+def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_max):
     """Generate 2D histogram of recovery rate by time and scale factor
     Inputs:
         recovered_times: list of dicts
@@ -201,8 +88,8 @@ def get_recovery_rate(recovered_times, bin_width, bin_height):
     total = np.array(total)
 
     # 2D histogram
-    x_edges = np.arange(RECOV_MIN, np.max(total[:,0]), bin_width)
-    y_edges = np.arange(np.min(total[:,1]), np.max(total[:,1]), bin_height)
+    x_edges = np.arange(RECOV_MIN, x_max, bin_width)
+    y_edges = np.arange(y_min, y_max, bin_height)
     rec_hist = np.histogram2d(recovered[:,0], recovered[:,1], [x_edges, y_edges])[0]
     total_hist = np.histogram2d(total[:,0], total[:,1], [x_edges, y_edges])[0]
     rate_hist = rec_hist / total_hist
@@ -239,13 +126,16 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
         if not lc_file.is_file():
             continue
 
-        print('\n%s - %s [%s/%s]' % (sn_name, band, i+1, len(supernovae)))
-        sn = Supernova(sn_name)
-        # Run injection-recovery on many randomly sampled parameters
-        sample_times = sample_params(iterations, sn, band, tstart_min, 
-                tstart_max, scale_min, scale_max)
-        # Append resulting recovered times
-        recovered_times += sample_times
+        try:
+            print('\n%s - %s [%s/%s]' % (sn_name, band, i+1, len(supernovae)))
+            sn = Supernova(sn_name)
+            # Run injection-recovery on many randomly sampled parameters
+            sample_times = sample_params(iterations, sn, band, tstart_min, 
+                    tstart_max, scale_min, scale_max)
+            # Append resulting recovered times
+            recovered_times += sample_times
+        except KeyError:
+            continue
 
     return recovered_times
 
@@ -399,8 +289,10 @@ class Supernova:
 
 
 if __name__ == '__main__':
-    # import argparse
-    # parser = argparse.ArgumentParser()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--overwrite', '-o', action='store_true',
+            help='Overwrite recovery rate output file')
     # parser.add_argument('iter', type=int, help='Iterations')
     # # tstart parameters
     # parser.add_argument('--tmin', '-t0', default=0, type=int,
@@ -435,7 +327,7 @@ if __name__ == '__main__':
     #         help='Detection significance level')
     # parser.add_argument('--overwrite', '-o', action='store_true',
     #         help='Overwrite sums')
-    # args = parser.parse_args()
+    args = parser.parse_args()
 
     # # Define parameter space
     # tstart = np.arange(args.tmin, args.tmax, args.tstep)
@@ -446,4 +338,4 @@ if __name__ == '__main__':
     #         'det': args.detections, 'sigma': args.sigma, 'overwrite': args.overwrite}
 
     # main(args.iter, tstart, twidth, **kwargs)
-    main()
+    main(overwrite=args.overwrite)

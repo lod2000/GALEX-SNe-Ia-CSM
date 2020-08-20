@@ -17,10 +17,11 @@ RECOV_MIN = 50 # minimum number of days after discovery to count as recovery
 SIGMA = 3
 WIDTH = 250 # days, from PTF11kx
 SCALE = 0
+RECOV_HIST_FILE = Path('out/recovery_rate.csv')
 
 # def main(iterations, tstart, scale, decay_rate=DECAY_RATE, scale=SCALE, 
 #         bins=BINS, det=DETECTIONS, sigma=SIGMA, overwrite=False):
-def main():
+def main(overwrite=False):
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
     output_file = Path('out/recovery.csv')
@@ -28,9 +29,14 @@ def main():
     supernovae = ['SN2007on', 'SN2010ai']
     # supernovae = sn_info.index.to_list()
 
-    recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
-    rate_hist = get_recovery_rate(recovered_times, 50, 0.1)
-    # print(rate_hist)
+    if overwrite or not RECOV_HIST_FILE.is_file():
+        recovered_times = run_ir(100, supernovae, 0, 1000, 0.5, 2)
+        rate_hist = get_recovery_rate(recovered_times, 50, 0.1)
+        output_csv(rate_hist, RECOV_HIST_FILE)
+    else:
+        rate_hist = pd.read_csv(RECOV_HIST_FILE, index_col=0)
+
+    print(rate_hist)
     plot_recovery_rate(rate_hist)
 
     # recovered_times = inject_recover(sn, 'FUV', 0, 1)
@@ -156,10 +162,11 @@ def plot_recovery_rate(rate_hist):
     # Flip y-axis
     rate_hist.sort_index(ascending=True, inplace=True)
     # Calculate data range
-    bin_width = rate_hist.columns[1] - rate_hist.columns[0]
-    bin_height = rate_hist.index[1] - rate_hist.index[0]
-    extent = (rate_hist.columns[0], rate_hist.columns[-1]+bin_width, 
-            rate_hist.index[0], rate_hist.index[-1]+bin_height)
+    x_bins = rate_hist.columns.to_numpy(dtype=float)
+    y_bins = rate_hist.index.to_numpy(dtype=float)
+    bin_width = x_bins[1] - x_bins[0]
+    bin_height = y_bins[1] - y_bins[0]
+    extent = (x_bins[0], x_bins[-1]+bin_width, y_bins[0], y_bins[-1]+bin_height)
     # Plot
     fig, ax = plt.subplots()
     im = ax.imshow(rate_hist, aspect='auto', origin='lower', extent=extent)

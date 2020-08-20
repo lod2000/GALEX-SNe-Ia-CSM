@@ -15,27 +15,24 @@ DECAY_RATE = 0.3
 RECOV_MIN = 50 # minimum number of days after discovery to count as recovery
 SIGMA = 3
 WIDTH = 250 # days, from PTF11kx
-RECOV_HIST_FILE = Path('out/recovery_rate.csv')
 
-# def main(iterations, tstart, scale, decay_rate=DECAY_RATE, scale=SCALE, 
-#         bins=BINS, det=DETECTIONS, sigma=SIGMA, overwrite=False):
-def main(overwrite=False):
+def main(iterations, overwrite=False, tstart_max=1000, scale_min=0.5, 
+            scale_max=2., t_max=1500, bin_width=50, bin_height=0.1):
 
     sn_info = pd.read_csv(Path('ref/sn_info.csv'), index_col='name')
-    output_file = Path('out/recovery.csv')
+    output_file = Path('out/recovery_%s.csv' % iterations)
 
-    supernovae = ['SN2007on', 'SN2010ai', 'SDSS-II SN 779', 'Hawk', 'HST04Sas']
-    # supernovae = sn_info.index.to_list()
+    # supernovae = ['SN2007on', 'SN2010ai', 'SDSS-II SN 779', 'Hawk', 'HST04Sas']
+    supernovae = sn_info.index.to_list()
 
-    if overwrite or not RECOV_HIST_FILE.is_file():
-        x_max = 1500
-        scale_min = 0.5
-        scale_max = 2
-        recovered_times = run_ir(10000, supernovae, 0, 1000, scale_min, scale_max)
-        rate_hist = get_recovery_rate(recovered_times, 50, x_max, 0.1, scale_min, scale_max)
-        output_csv(rate_hist, RECOV_HIST_FILE)
+    if overwrite or not output_file.is_file():
+        recovered_times = run_ir(iterations, supernovae, 0, tstart_max, 
+                scale_min, scale_max)
+        rate_hist = get_recovery_rate(recovered_times, bin_width, t_max, 
+                bin_height, scale_min, scale_max)
+        output_csv(rate_hist, output_file)
     else:
-        rate_hist = pd.read_csv(RECOV_HIST_FILE, index_col=0)
+        rate_hist = pd.read_csv(output_file, index_col=0)
 
     print(rate_hist)
     plot_recovery_rate(rate_hist)
@@ -136,6 +133,10 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
             recovered_times += sample_times
         except KeyError:
             continue
+
+        if i % 10 == 0:
+            np.save(Path('out/progress.npy'), np.array(recovered_times))
+            print('Progress saved.')
 
     return recovered_times
 
@@ -291,9 +292,9 @@ class Supernova:
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument('iter', type=int, help='Iterations')
     parser.add_argument('--overwrite', '-o', action='store_true',
             help='Overwrite recovery rate output file')
-    # parser.add_argument('iter', type=int, help='Iterations')
     # # tstart parameters
     # parser.add_argument('--tmin', '-t0', default=0, type=int,
     #         help='Minimum CSM model interaction start time, in days post-discovery')
@@ -338,4 +339,4 @@ if __name__ == '__main__':
     #         'det': args.detections, 'sigma': args.sigma, 'overwrite': args.overwrite}
 
     # main(args.iter, tstart, twidth, **kwargs)
-    main(overwrite=args.overwrite)
+    main(args.iter, overwrite=args.overwrite)

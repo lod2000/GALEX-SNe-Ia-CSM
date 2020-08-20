@@ -28,11 +28,11 @@ def main(overwrite=False):
     # supernovae = sn_info.index.to_list()
 
     if overwrite or not RECOV_HIST_FILE.is_file():
-        x_max = 1000
-        y_min = 0.5
-        y_max = 2
-        recovered_times = run_ir(100, supernovae, 0, x_max, y_min, y_max)
-        rate_hist = get_recovery_rate(recovered_times, 50, x_max, 0.1, y_min, y_max)
+        x_max = 1500
+        scale_min = 0.5
+        scale_max = 2
+        recovered_times = run_ir(10000, supernovae, 0, 1000, scale_min, scale_max)
+        rate_hist = get_recovery_rate(recovered_times, 50, x_max, 0.1, scale_min, scale_max)
         output_csv(rate_hist, RECOV_HIST_FILE)
     else:
         rate_hist = pd.read_csv(RECOV_HIST_FILE, index_col=0)
@@ -56,12 +56,12 @@ def plot_recovery_rate(rate_hist):
 
     # Plot
     fig, ax = plt.subplots()
-    im = ax.imshow(rate_hist, aspect='auto', origin='lower', extent=extent)
+    im = ax.imshow(rate_hist*100, aspect='auto', origin='lower', extent=extent)
     ax.xaxis.set_minor_locator(MultipleLocator(bin_width))
     ax.yaxis.set_minor_locator(MultipleLocator(bin_height))
     ax.set_xlabel('Time since discovery [days]')
     ax.set_ylabel('Scale factor')
-    plt.colorbar(im)
+    plt.colorbar(im, label='Recovery rate [%]')
     fig.tight_layout()
     plt.show()
 

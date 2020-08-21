@@ -89,6 +89,7 @@ def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_ma
     y_edges = np.arange(y_min, y_max, bin_height)
     rec_hist = np.histogram2d(recovered[:,0], recovered[:,1], [x_edges, y_edges])[0]
     total_hist = np.histogram2d(total[:,0], total[:,1], [x_edges, y_edges])[0]
+    # Calculate recovery rate
     rate_hist = rec_hist / total_hist
     # Transpose and convert to DataFrame with time increasing along the rows
     # and scale height increasing down the columns. Column and index labels
@@ -112,15 +113,25 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
     """
 
     # List of supernovae and bands to perform injection-recovery
-    supernovae = sorted(list(supernovae) * 2)
-    bands = ['FUV', 'NUV'] * len(supernovae)
     recovered_times = []
+    to_remove = []
+    supernovae = sorted(list(supernovae) * 2)
+
+    # Load progress file, if any
+    progress_file = Path('out/progress_%s.npy' % iterations)
+    if progress_file.is_file():
+        print('\nLoading previous progress file...')
+        recovered_times = np.load(progress_file, allow_pickle=True)
+        to_remove = [(rec['sn'], rec['band']) for rec in recovered_times]
+
+    bands = ['FUV', 'NUV'] * len(supernovae)
 
     # Iterate over supernovae, bands
     for i, (sn_name, band) in enumerate(zip(supernovae, bands)):
+
         # Ignore if light curve file doesn't exist
         lc_file = LC_DIR / sn2fname(sn_name, band)
-        if not lc_file.is_file():
+        if not lc_file.is_file() or (sn_name, band) in to_remove:
             continue
 
         try:
@@ -134,9 +145,9 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
         except KeyError:
             continue
 
-        if i % 10 == 0:
-            np.save(Path('out/progress.npy'), np.array(recovered_times))
-            print('Progress saved.')
+        # Save progress
+        np.save(progress_file, np.array(recovered_times))
+        print('Progress saved.')
 
     return recovered_times
 

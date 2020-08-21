@@ -191,7 +191,7 @@ def main():
             label='ZTF')
 
     # ASAS-SN interval
-    asassn_bci = 100 * binom_conf_interval(3, 588, confidence_level=conf_level, interval='jeffreys')
+    asassn_bci = 100 * binom_conf_interval(3, 460, confidence_level=conf_level, interval='jeffreys')
     print(asassn_bci)
     asassn_mean = np.mean(asassn_bci)
     ax.errorbar([0.2], [asassn_mean], yerr=([asassn_mean - asassn_bci[0]], [asassn_bci[1] - asassn_mean]),

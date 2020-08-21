@@ -141,7 +141,7 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max,
             continue
 
         # Save to binary numpy file every 10 iterations (takes a long time)
-        if i % 10 == 0 and i != 0:
+        if i % 10 == 0 and i >= 600:
             print('Saving progress...')
             np.save(progress_file, np.array(recovered_times))
             print('Progress saved.')

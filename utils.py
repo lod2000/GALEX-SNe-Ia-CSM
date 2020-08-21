@@ -511,7 +511,7 @@ def get_flags(sn, band):
     return flag_count
 
 
-def import_lc(sn, band):
+def import_lc(sn, band, write_high_bg=False):
     """
     Imports light curve file for specified SN and band. Cuts points with bad
     flags or sources outside detector radius, and also fixes duplicated headers.
@@ -559,7 +559,8 @@ def import_lc(sn, band):
     lc.insert(29, 'bg_cps', lc['bg_counts'] / lc['exptime'])
     bg_median = np.median(lc['bg_cps'])
     high_bg = lc[lc['bg_cps'] > 3 * bg_median]
-    if len(high_bg.index) > 0:
+    lc = lc[lc['bg_cps'] < 3 * bg_median]
+    if len(high_bg.index) > 0 and write_high_bg:
         high_bg.insert(30, 'bg_cps_median', [bg_median] * len(high_bg.index))
         high_bg.insert(0, 'name', [sn] * len(high_bg.index))
         high_bg.insert(1, 'band', [band] * len(high_bg.index))
@@ -567,7 +568,6 @@ def import_lc(sn, band):
             high_bg = pd.read_csv(BG_FILE, index_col=0).append(high_bg)
             high_bg.drop_duplicates(inplace=True)
         output_csv(high_bg, BG_FILE, index=True)
-        lc = lc[lc['bg_counts'] < 3 * bg_median]
 
     # Add manual cuts (e.g. previously identified as a ghost image)
     manual_cuts = pd.read_csv(Path('ref/manual_cuts.csv'))

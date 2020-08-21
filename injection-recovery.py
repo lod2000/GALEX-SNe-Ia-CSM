@@ -121,7 +121,7 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
     progress_file = Path('out/progress_%s.npy' % iterations)
     if progress_file.is_file():
         print('\nLoading previous progress file...')
-        recovered_times = np.load(progress_file, allow_pickle=True)
+        recovered_times = list(np.load(progress_file, allow_pickle=True))
         to_remove = [(rec['sn'], rec['band']) for rec in recovered_times]
 
     bands = ['FUV', 'NUV'] * len(supernovae)
@@ -247,17 +247,6 @@ def recover_model(data):
     # Limit to points some time after discovery (default 50 days)
     recovered = recovered[recovered['t_delta_rest'] >= RECOV_MIN]
     return recovered
-
-
-# def corner_plot(sums, bin):
-#     """Display a corner plot of model parameter samples."""
-
-#     params = np.vstack(sums.index.to_numpy())
-#     counts = np.array([sums[bin].to_numpy()]).T
-#     data = np.hstack((params[:,0:2], counts))
-    
-#     fig = corner(data, labels=['tstart', 'twidth', 'counts'])
-#     plt.show()
 
 
 class LightCurve:

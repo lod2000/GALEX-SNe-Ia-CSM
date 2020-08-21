@@ -10,7 +10,7 @@ from utils import *
 from CSMmodel import CSMmodel
 
 # Default values
-BINS = [0, 100, 500, 2500]
+# BINS = [0, 100, 500, 2500]
 DECAY_RATE = 0.3
 RECOV_MIN = 50 # minimum number of days after discovery to count as recovery
 SIGMA = 3
@@ -27,18 +27,17 @@ def main(iterations, overwrite=False, tstart_max=1000, scale_min=0.5,
 
     if overwrite or not output_file.is_file():
         recovered_times = run_ir(iterations, supernovae, 0, tstart_max, 
-                scale_min, scale_max)
+                scale_min, scale_max, bin_width, bin_height, t_max, output_file)
         rate_hist = get_recovery_rate(recovered_times, bin_width, t_max, 
                 bin_height, scale_min, scale_max)
         output_csv(rate_hist, output_file)
     else:
         rate_hist = pd.read_csv(output_file, index_col=0)
 
-    print(rate_hist)
-    plot_recovery_rate(rate_hist)
+    plot_recovery_rate(rate_hist, show=True)
 
 
-def plot_recovery_rate(rate_hist):
+def plot_recovery_rate(rate_hist, show=False):
     """Plot 2D histogram of recovery rate by time since discovery and scale factor."""
 
     # Flip y-axis
@@ -60,7 +59,11 @@ def plot_recovery_rate(rate_hist):
     ax.set_ylabel('Scale factor')
     plt.colorbar(im, label='Recovery rate [%]')
     fig.tight_layout()
-    plt.show()
+    plt.savefig(Path('out/recovery.png'), dpi=300)
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 
 def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_max):
@@ -87,6 +90,9 @@ def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_ma
     # 2D histogram
     x_edges = np.arange(RECOV_MIN, x_max, bin_width)
     y_edges = np.arange(y_min, y_max, bin_height)
+    # Dummy array if recovered is empty
+    if recovered.shape == (0,):
+        recovered = np.array([[-1,-1]])
     rec_hist = np.histogram2d(recovered[:,0], recovered[:,1], [x_edges, y_edges])[0]
     total_hist = np.histogram2d(total[:,0], total[:,1], [x_edges, y_edges])[0]
     # Calculate recovery rate
@@ -99,7 +105,8 @@ def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_ma
     return rate_hist
 
 
-def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max):
+def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max,
+        bin_width, bin_height, t_max, output_file):
     """Run injection recovery with random parameters for a list of supernovae.
     Inputs:
         iterations: number of times to sample parameter space
@@ -129,9 +136,26 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
     # Iterate over supernovae, bands
     for i, (sn_name, band) in enumerate(zip(supernovae, bands)):
 
+        # Skip previously run SNe
+        if (sn_name, band) in to_remove:
+            continue
+
+        # Save to binary numpy file every 10 iterations (takes a long time)
+        if i % 10 == 0 and i != 0:
+            print('Saving progress...')
+            np.save(progress_file, np.array(recovered_times))
+            print('Progress saved.')
+
+        # Plot histogram every 50 iterations
+        if i % 50 == 0 and i != 0:
+            rate_hist = get_recovery_rate(recovered_times, bin_width, t_max, 
+                    bin_height, scale_min, scale_max)
+            output_csv(rate_hist, output_file)
+            plot_recovery_rate(rate_hist, show=False)
+
         # Ignore if light curve file doesn't exist
         lc_file = LC_DIR / sn2fname(sn_name, band)
-        if not lc_file.is_file() or (sn_name, band) in to_remove:
+        if not lc_file.is_file():
             continue
 
         try:
@@ -144,10 +168,6 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max)
             recovered_times += sample_times
         except KeyError:
             continue
-
-        # Save progress
-        np.save(progress_file, np.array(recovered_times))
-        print('Progress saved.')
 
     return recovered_times
 

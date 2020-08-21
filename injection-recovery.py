@@ -177,7 +177,7 @@ def sample_params(iterations, sn, band, tstart_min, tstart_max, scale_min, scale
     sample_times = []
 
     # Run injection-recovery in parallel for each sampled CSM parameter
-    with Pool() as pool:
+    with Pool(processes=5) as pool:
         func = partial(inject_recover, sn=sn, lc=lc)
         imap = pool.imap(func, params, chunksize=10)
         for times in tqdm(imap, total=params.shape[0]):

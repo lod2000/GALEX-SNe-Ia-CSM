@@ -2,6 +2,7 @@ from tqdm import tqdm
 import itertools
 from multiprocessing import Pool
 from functools import partial
+from functools import reduce
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from corner import corner
@@ -28,16 +29,16 @@ def main(iterations, overwrite=False, tstart_max=1000, scale_min=0.5,
     if overwrite or not output_file.is_file():
         recovered_times = run_ir(iterations, supernovae, 0, tstart_max, 
                 scale_min, scale_max, bin_width, bin_height, t_max, output_file)
-        rate_hist = get_recovery_rate(recovered_times, bin_width, t_max, 
+        count_hist = count_nondetections(recovered_times, bin_width, t_max, 
                 bin_height, scale_min, scale_max)
-        output_csv(rate_hist, output_file)
+        output_csv(count_hist, output_file)
     else:
-        rate_hist = pd.read_csv(output_file, index_col=0)
+        count_hist = pd.read_csv(output_file, index_col=0)
 
-    plot_recovery_rate(rate_hist, show=True)
+    plot_nondetections(count_hist, show=True)
 
 
-def plot_recovery_rate(rate_hist, show=False):
+def plot_nondetections(rate_hist, show=False):
     """Plot 2D histogram of recovery rate by time since discovery and scale factor."""
 
     # Flip y-axis
@@ -52,12 +53,12 @@ def plot_recovery_rate(rate_hist, show=False):
 
     # Plot
     fig, ax = plt.subplots()
-    im = ax.imshow(rate_hist*100, aspect='auto', origin='lower', extent=extent)
+    im = ax.imshow(rate_hist, aspect='auto', origin='lower', extent=extent)
     ax.xaxis.set_minor_locator(MultipleLocator(bin_width))
     ax.yaxis.set_minor_locator(MultipleLocator(bin_height))
-    ax.set_xlabel('Time since discovery [days]')
+    ax.set_xlabel('Rest frame time since discovery [days]')
     ax.set_ylabel('Scale factor')
-    plt.colorbar(im, label='Recovery rate [%]')
+    plt.colorbar(im, label='No. of excluded SNe Ia')
     fig.tight_layout()
     plt.savefig(Path('out/recovery.png'), dpi=300)
     if show:
@@ -66,14 +67,17 @@ def plot_recovery_rate(rate_hist, show=False):
         plt.close()
 
 
-def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_max):
-    """Generate 2D histogram of recovery rate by time and scale factor
+def count_nondetections(recovered_times, bin_width, x_max, bin_height, y_min, y_max):
+    """Generate 2D histogram of nondetection counts by time and scale factor
     Inputs:
         recovered_times: list of dicts
         bin_width: bin width in heatmap plot, in days
+        x_max: max value on x-axis
         bin_height: bin height in heatmap plot, in scale factor fraction
+        y_min: minimum value on y-axis
+        y_max: max value on y-axis
     Output:
-        rate_hist: 2D histogram of recovery rates, DataFrame
+        count_sum: 2D histogram of nondetection counts
     """
     
     print('\nBinning recovery rates...')
@@ -81,28 +85,46 @@ def get_recovery_rate(recovered_times, bin_width, x_max, bin_height, y_min, y_ma
     recovered = []
     total = []
     for rec_dict in tqdm(recovered_times):
-        recovered += [[time, rec_dict['scale']] for time in rec_dict['recovered']]
-        total += [[time, rec_dict['scale']] for time in rec_dict['all']]
+        recovered += [[rec_dict['sn'], time, rec_dict['scale']] for time in rec_dict['recovered']]
+        total += [[rec_dict['sn'], time, rec_dict['scale']] for time in rec_dict['all']]
 
     recovered = np.array(recovered)
     total = np.array(total)
 
-    # 2D histogram
+    # Bin edges
     x_edges = np.arange(RECOV_MIN, x_max, bin_width)
     y_edges = np.arange(y_min, y_max, bin_height)
+
     # Dummy array if recovered is empty
     if recovered.shape == (0,):
-        recovered = np.array([[-1,-1]])
-    rec_hist = np.histogram2d(recovered[:,0], recovered[:,1], [x_edges, y_edges])[0]
-    total_hist = np.histogram2d(total[:,0], total[:,1], [x_edges, y_edges])[0]
-    # Calculate recovery rate
-    rate_hist = rec_hist / total_hist
-    # Transpose and convert to DataFrame with time increasing along the rows
-    # and scale height increasing down the columns. Column and index labels
-    # are the lower bound of each bin
-    rate_hist = pd.DataFrame(rate_hist.T, index=y_edges[:-1], columns=x_edges[:-1])
+        return pd.DataFrame(np.full((len(x_edges), len(y_edges)), 0), 
+                index=y_edges[:-1], columns=x_edges[:-1])
 
-    return rate_hist
+    # Count nondetections per supernova
+    counts = []
+    for sn_name in list(dict.fromkeys(recovered[:,0])):
+        # Select by sn name
+        sn_rec = recovered[recovered[:,0] == sn_name][:,1:].astype(float)
+        sn_tot = total[total[:,0] == sn_name][:,1:].astype(float)
+        # 2D histogram by t_delta_rest and scale
+        rec_hist = np.histogram2d(sn_rec[:,0], sn_rec[:,1], [x_edges, y_edges])[0]
+        tot_hist = np.histogram2d(sn_tot[:,0], sn_tot[:,1], [x_edges, y_edges])[0]
+        # Calculate recovery rate
+        rate_hist = rec_hist / tot_hist
+        # Transpose and convert to DataFrame with time increasing along the rows
+        # and scale height increasing down the columns. Column and index labels
+        # are the lower bound of each bin
+        rate_hist = pd.DataFrame(rate_hist.T, index=y_edges[:-1], columns=x_edges[:-1])
+        counts.append(rate_hist)
+
+    # Sum all histograms
+    count_sum = reduce(lambda x, y: x.add(y, fill_value=0), counts)
+    return count_sum
+
+
+def recovery_histogram(x_recovered, y_recovered, x_total, y_total, x_edges, y_edges):
+    """Generate histogram of recovery rate given x and y recovered/total values"""
+    pass
 
 
 def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max,
@@ -141,21 +163,30 @@ def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max,
             continue
 
         # Save to binary numpy file every 10 iterations (takes a long time)
-        if i % 10 == 0 and i >= 600:
+        if i % 10 == 0 and i != 0:
             print('Saving progress...')
             np.save(progress_file, np.array(recovered_times))
             print('Progress saved.')
 
         # Plot histogram every 50 iterations
         if i % 50 == 0 and i != 0:
-            rate_hist = get_recovery_rate(recovered_times, bin_width, t_max, 
+            rate_hist = count_nondetections(recovered_times, bin_width, t_max, 
                     bin_height, scale_min, scale_max)
             output_csv(rate_hist, output_file)
-            plot_recovery_rate(rate_hist, show=False)
+            plot_nondetections(rate_hist, show=False)
 
         # Ignore if light curve file doesn't exist
         lc_file = LC_DIR / sn2fname(sn_name, band)
         if not lc_file.is_file():
+            print('\nNo light curve file found for %s - %s [%s/%s]' % (sn_name, band, i+1, len(supernovae)))
+            recovered_times.append({
+                'sn': sn_name,
+                'band': band,
+                'tstart': -1,
+                'scale': -1,
+                'recovered': [],
+                'all': []
+            })
             continue
 
         try:

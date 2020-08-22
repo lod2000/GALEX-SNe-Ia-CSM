@@ -106,15 +106,9 @@ def count_nondetections(recovered_times, bin_width, x_max, bin_height, y_min, y_
         # Select by sn name
         sn_rec = recovered[recovered[:,0] == sn_name][:,1:].astype(float)
         sn_tot = total[total[:,0] == sn_name][:,1:].astype(float)
-        # 2D histogram by t_delta_rest and scale
-        rec_hist = np.histogram2d(sn_rec[:,0], sn_rec[:,1], [x_edges, y_edges])[0]
-        tot_hist = np.histogram2d(sn_tot[:,0], sn_tot[:,1], [x_edges, y_edges])[0]
-        # Calculate recovery rate
-        rate_hist = rec_hist / tot_hist
-        # Transpose and convert to DataFrame with time increasing along the rows
-        # and scale height increasing down the columns. Column and index labels
-        # are the lower bound of each bin
-        rate_hist = pd.DataFrame(rate_hist.T, index=y_edges[:-1], columns=x_edges[:-1])
+        # Recovery rate histogram
+        rate_hist = recovery_histogram(sn_rec[:,0], sn_rec[:,1], sn_tot[:,0], 
+                sn_tot[:,1], x_edges, y_edges)
         counts.append(rate_hist)
 
     # Sum all histograms
@@ -123,8 +117,30 @@ def count_nondetections(recovered_times, bin_width, x_max, bin_height, y_min, y_
 
 
 def recovery_histogram(x_recovered, y_recovered, x_total, y_total, x_edges, y_edges):
-    """Generate histogram of recovery rate given x and y recovered/total values"""
-    pass
+    """Generate histogram of recovery rate given x and y recovered/total values.
+    Inputs:
+        x_recovered: x-values for recovered data
+        y_recovered: y-values for recovered data
+        x_total: x-values for all data
+        y_total: y-values for all data
+        x_edges: bin edges for x data
+        y_edges: bin edges for y data
+    Output:
+        rate_hist: 2D histogram of recovery rate
+    """
+
+    # 2D histograms for recovered data and total data
+    recovered = np.histogram2d(x_recovered, y_recovered, [x_edges, y_edges])[0]
+    total = np.histogram2d(x_total, y_total, [x_edges, y_edges])[0]
+
+    # Calculate recovery rate
+    rate_hist = recovered / total
+
+    # Transpose and convert to DataFrame with time increasing along the rows
+    # and scale height increasing down the columns. Column and index labels
+    # are the lower bound of each bin
+    rate_hist = pd.DataFrame(rate_hist.T, index=y_edges[:-1], columns=x_edges[:-1])
+    return rate_hist
 
 
 def run_ir(iterations, supernovae, tstart_min, tstart_max, scale_min, scale_max,
